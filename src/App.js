@@ -432,7 +432,7 @@ export default function RaidManager() {
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto font-inter"> {/* Inter 폰트 적용 */}
       {console.log('RaidManager: JSX 출력 렌더링 중.')} 
       <div className="min-w-full md:min-w-[1024px] max-w-7xl mx-auto"> {/* 최소 너비 및 중앙 정렬 */}
-        <h1 className="text-3xl font-bold mb-8 text-center">어바웃 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">about 전용 공격대 관리</h1>
         
         {/* 에러 메시지 표시 */}
         {error && (
