@@ -117,7 +117,9 @@ export default function RaidManager() {
     setError('');
     
     try {
-      const requestUrl = `/characters/${encodeURIComponent(characterName)}/siblings`;
+      // API 요청 URL: Curl로 성공한 경로인 '/characters/' 사용
+      // Vercel Production 환경에서는 package.json의 proxy가 작동하지 않으므로 절대 경로 사용
+      const requestUrl = `https://developer-lostark.game.onstove.com/characters/${encodeURIComponent(characterName)}/siblings`; 
       console.log('searchCharacter: Attempting to fetch from URL:', requestUrl);
       console.log('searchCharacter: Authorization header (truncated):', `bearer ${API_KEY.substring(0,10)}...`);
 
