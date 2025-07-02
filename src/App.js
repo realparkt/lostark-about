@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft } from 'lucide-react'; 
+import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft, UserPlus } from 'lucide-react'; // UserPlus 아이콘 추가
 
 // API 키를 환경 변수에서 불러옵니다.
 const API_KEY = process.env.REACT_APP_LOSTARK_API_KEY; 
@@ -18,7 +18,10 @@ export default function RaidManager() {
   const [newRaidName, setNewRaidName] = useState('');
   const [newRaidDate, setNewRaidDate] = useState('');
   const [newRraidTime, setNewRaidTime] = useState('');
-  const [draggedCharacter, setDraggedCharacter] = useState(null);
+  // 드래그앤드롭 대신 클릭으로 캐릭터 할당을 위한 상태
+  const [characterToAssign, setCharacterToAssign] = useState(null); 
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const [showRaidDetails, setShowRaidDetails] = useState(false); 
 
   // useRef를 사용하여 공격대 목록 컨테이너에 접근
@@ -46,10 +49,8 @@ export default function RaidManager() {
         try {
           const parsedRaids = JSON.parse(savedRaids);
           setRaids(parsedRaids);
-          // 앱 로드 시 첫 번째 공격대가 있다면 선택 (선택만 하고 상세 페이지는 열지 않음)
-          if (parsedRaids.length > 0) { // !selectedRaid 조건은 제거
+          if (parsedRaids.length > 0) {
               setSelectedRaid(parsedRaids[0].id);
-              // setShowRaidDetails(true); // 이 줄을 제거하여 초기 로드 시 상세 페이지가 열리지 않도록 함
           }
           console.log('useEffect [Load saved raids]: Successfully loaded saved raids. Count:', parsedRaids.length);
         } catch (e) {
@@ -59,7 +60,6 @@ export default function RaidManager() {
         console.log('useEffect [Load saved raids]: No saved raids found.');
       }
     }
-    // 앱 로드 시 항상 목록 화면으로 시작하도록 강제
     setShowRaidDetails(false); 
   }, []); 
 
@@ -102,7 +102,7 @@ export default function RaidManager() {
   const searchCharacter = async () => {
     console.log('searchCharacter: Function called.');
     if (!API_KEY) { 
-      setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수를 확인해주세요.');
+      setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수 (REACT_APP_LOSTARK_API_KEY)를 확인해주세요.');
       console.error('searchCharacter: API_KEY is missing, cannot proceed with fetch.');
       return;
     }
@@ -117,8 +117,6 @@ export default function RaidManager() {
     setError('');
     
     try {
-      // API 요청 URL: Curl로 성공한 경로인 '/characters/' 사용
-      // Vercel Production 환경에서는 package.json의 proxy가 작동하지 않으므로 절대 경로 사용
       const requestUrl = `https://developer-lostark.game.onstove.com/characters/${encodeURIComponent(characterName)}/siblings`; 
       console.log('searchCharacter: Attempting to fetch from URL:', requestUrl);
       console.log('searchCharacter: Authorization header (truncated):', `bearer ${API_KEY.substring(0,10)}...`);
@@ -132,24 +130,20 @@ export default function RaidManager() {
 
       console.log('searchCharacter: API Response received. Status:', response.status);
 
-      // 응답 본문을 한 번만 텍스트로 읽어옵니다.
       const responseBodyText = await response.text(); 
       console.log('searchCharacter: Raw response text (truncated):', responseBodyText.substring(0, 500));
 
       let data;
       try {
-        // 읽어온 텍스트를 JSON으로 파싱 시도
         data = JSON.parse(responseBodyText); 
         console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', JSON.stringify(data).substring(0, 200) + '...');
       } catch (jsonError) {
-        // JSON 파싱 실패 시 (예: 서버가 HTML 오류 페이지를 반환한 경우)
         console.error('searchCharacter: JSON parsing failed!', jsonError);
         setError(`데이터 파싱 오류: 서버가 유효한 JSON을 반환하지 않았습니다. 응답 내용: ${responseBodyText.substring(0, 100)}...`);
-        return; // JSON 파싱 실패 시 함수 종료
+        return; 
       }
 
       if (!response.ok) {
-        // response.ok가 false일 경우 (HTTP 상태 코드 2xx가 아님)
         console.error('searchCharacter: API Response NOT OK. HTTP Status:', response.status);
         
         let errorMessage = '캐릭터 정보를 가져올 수 없습니다. 다시 시도해주세요.';
@@ -164,14 +158,12 @@ export default function RaidManager() {
         } else if (response.status >= 500) {
             errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
         }
-        // HTML 응답의 경우, HTML 내용을 에러 메시지에 포함 (보안상 주의)
         if (responseBodyText.startsWith('<!doctype html>')) {
             errorMessage += ` (서버 응답: ${responseBodyText.substring(0, 100)}...)`;
         }
         throw new Error(errorMessage);
       }
       
-      // response.ok가 true이고, 데이터가 성공적으로 파싱된 경우
       if (!data || data.length === 0) {
         setError('해당 캐릭터 또는 연관 캐릭터를 찾을 수 없습니다.');
         setCharacters([]);
@@ -287,64 +279,48 @@ export default function RaidManager() {
     console.log('deleteRaid: Raid deleted. Remaining raids:', updatedRaids.length); 
   };
 
-  // 드래그 앤 드롭 핸들러
-  const handleDragStart = (e, character) => {
-    console.log('handleDragStart: Dragging character:', character.displayName || character.CharacterName);
-    e.dataTransfer.setData('text/plain', JSON.stringify(character));
-    setDraggedCharacter(character); 
+  // 모바일용: 캐릭터를 선택하여 할당 모달 열기
+  const handleSelectCharacterToAssign = (character) => {
+    setCharacterToAssign(character);
+    setShowAssignModal(true);
+    console.log('handleSelectCharacterToAssign: Selected character for assignment:', character.displayName);
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault(); 
-  };
+  // 모바일용: 캐릭터를 파티에 할당
+  const assignCharacterToParty = (partyNum, slot) => {
+    if (!characterToAssign || !selectedRaid) return;
 
-  const handleDrop = (e, partyNum, slot) => {
-    console.log('handleDrop: Called for Party:', partyNum, 'Slot:', slot);
-    e.preventDefault();
-    const droppedCharacterData = e.dataTransfer.getData('text/plain');
-    let droppedCharacter;
-    try {
-        droppedCharacter = JSON.parse(droppedCharacterData);
-        console.log('handleDrop: Successfully parsed dropped character:', droppedCharacter.displayName || droppedCharacter.CharacterName);
-    } catch (error) {
-        console.error("handleDrop: Failed to parse dragged character data:", error);
-        setError("드래그한 캐릭터 데이터를 읽을 수 없습니다.");
-        return; 
-    }
-
-    if (!droppedCharacter || !selectedRaid) {
-      console.warn('handleDrop: No dropped character or no raid selected.');
-      return;
-    }
+    console.log(`assignCharacterToParty: Assigning ${characterToAssign.displayName} to Party ${partyNum}, Slot ${slot}`);
 
     const updatedRaids = raids.map(raid => {
       if (raid.id === selectedRaid) {
         const updatedRaid = { ...raid };
         
-        // 드롭된 캐릭터가 이미 다른 슬롯에 있다면 먼저 제거 (CharacterName으로 비교)
+        // 이미 배치된 캐릭터인지 확인하고 제거
         ['party1', 'party2'].forEach(partyKey => {
-          if (updatedRaid[partyKey].support?.CharacterName === droppedCharacter.CharacterName) {
+          if (updatedRaid[partyKey].support?.CharacterName === characterToAssign.CharacterName) {
             updatedRaid[partyKey].support = null;
-            console.log('handleDrop: Removed from support slot in', partyKey);
+            console.log('assignCharacterToParty: Removed from support slot in', partyKey);
           }
           updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
-            d => d.CharacterName !== droppedCharacter.CharacterName
+            d => d.CharacterName !== characterToAssign.CharacterName
           );
           if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) { 
-            console.log('handleDrop: Removed from dealer slot in', partyKey);
+            console.log('assignCharacterToParty: Removed from dealer slot in', partyKey);
           }
         });
 
+        // 새 위치에 배치
         if (slot === 'support') {
-          updatedRaid[`party${partyNum}`].support = droppedCharacter;
-          console.log('handleDrop: Added to support slot in party', partyNum);
-        } else { 
+          updatedRaid[`party${partyNum}`].support = characterToAssign;
+          console.log('assignCharacterToParty: Added to support slot in party', partyNum);
+        } else { // 딜러 슬롯
           if (updatedRaid[`party${partyNum}`].dealers.length < 3) {
-            updatedRaid[`party${partyNum}`].dealers.push(droppedCharacter);
-            console.log('handleDrop: Added to dealer slot in party', partyNum);
+            updatedRaid[`party${partyNum}`].dealers.push(characterToAssign);
+            console.log('assignCharacterToParty: Added to dealer slot in party', partyNum);
           } else {
             setError('딜러 슬롯이 꽉 찼습니다. 기존 캐릭터를 먼저 제거해주세요.');
-            console.warn('handleDrop: Dealer slot full in party', partyNum);
+            console.warn('assignCharacterToParty: Dealer slot full in party', partyNum);
             return updatedRaid; 
           }
         }
@@ -357,10 +333,11 @@ export default function RaidManager() {
     setRaids(updatedRaids);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lostarkRaids', JSON.stringify(updatedRaids));
-      console.log('handleDrop: Raid updated in localStorage.');
+      console.log('assignCharacterToParty: Raid updated in localStorage.');
     }
-    setDraggedCharacter(null); 
-    console.log('handleDrop: Function finished.');
+    setCharacterToAssign(null); 
+    setShowAssignModal(false); // 모달 닫기
+    console.log('assignCharacterToParty: Assignment finished.');
   };
 
   // 캐릭터 제거 (슬롯에서)
@@ -421,45 +398,45 @@ export default function RaidManager() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto">
-      {console.log('RaidManager: Rendering JSX output.')} {/* JSX 렌더링 직전 로그 */}
-      <div className="min-w-[1024px] max-w-7xl mx-auto">
+      {console.log('RaidManager: Rendering JSX output.')} 
+      <div className="min-w-full md:min-w-[1024px] max-w-7xl mx-auto"> {/* min-w-full 추가 */}
         <h1 className="text-3xl font-bold mb-8 text-center">about 공격대 관리</h1>
         
         {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded-md flex items-center max-w-2xl mx-auto">
+          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded-md flex items-center max-w-full md:max-w-2xl mx-auto text-sm"> {/* max-w-full, text-sm 추가 */}
             <AlertCircle className="mr-2 flex-shrink-0" size={16} />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="flex gap-6">
+        <div className="flex flex-col md:flex-row gap-6"> {/* flex-col md:flex-row 추가 */}
           {/* 좌측: 캐릭터 조회 */}
-          <div className="w-1/2 bg-gray-800 p-6 rounded-lg">
+          <div className="w-full md:w-1/2 bg-gray-800 p-6 rounded-lg"> {/* w-full md:w-1/2 추가 */}
             <h2 className="text-xl font-semibold mb-4 flex items-center">
               <Search className="mr-2" size={20} />
               캐릭터 조회
             </h2>
             
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4"> {/* flex-col sm:flex-row 추가 */}
               <input
                 type="text"
                 value={characterName}
                 onChange={(e) => setCharacterName(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && searchCharacter()}
                 placeholder="캐릭터명 입력"
-                className="flex-1 px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="flex-1 px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-base" {/* text-base 추가 */}
               />
               <button
                 onClick={searchCharacter}
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-base" {/* text-base 추가 */}
               >
                 {loading ? '조회중...' : '조회'}
               </button>
             </div>
 
             {/* 캐릭터 목록 */}
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+            <div className="space-y-2 max-h-[400px] sm:max-h-[600px] overflow-y-auto"> {/* max-h 조정 */}
               {characters.length === 0 && !loading && (
                 <div className="text-center text-gray-500 py-8">
                   캐릭터를 검색해주세요
@@ -468,24 +445,36 @@ export default function RaidManager() {
               {characters.map((char, index) => (
                 <div
                   key={`${char.CharacterName}-${index}`} 
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, char)} 
-                  className="p-3 bg-gray-700 rounded-md cursor-move hover:bg-gray-600 transition-colors"
+                  // draggable 속성 제거 (모바일 드래그앤드롭 대신 클릭 할당)
+                  // onDragStart 속성 제거
+                  className="p-3 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors flex items-center justify-between"
                 >
-                  <div className="font-semibold">{char.displayName || char.CharacterName}</div> 
-                  <div className="text-sm text-gray-400">
-                    Lv.{char.CharacterLevel} {char.CharacterClassName}
+                  <div>
+                    <div className="font-semibold text-base">{char.displayName || char.CharacterName}</div> {/* text-base 추가 */}
+                    <div className="text-sm text-gray-400">
+                      Lv.{char.CharacterLevel} {char.CharacterClassName}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      아이템 레벨: {char.ItemAvgLevel}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    아이템 레벨: {char.ItemAvgLevel}
-                  </div>
+                  {/* 모바일용: 파티에 추가 버튼 */}
+                  {selectedRaid && ( /* 선택된 공격대가 있을 때만 버튼 표시 */
+                    <button
+                      onClick={() => handleSelectCharacterToAssign(char)}
+                      className="ml-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 rounded-md text-sm flex items-center"
+                    >
+                      <UserPlus size={16} className="mr-1" />
+                      추가
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
           {/* 우측: 공격대 관리 */}
-          <div className="w-1/2 bg-gray-800 p-6 rounded-lg">
+          <div className="w-full md:w-1/2 bg-gray-800 p-6 rounded-lg"> {/* w-full md:w-1/2 추가 */}
             {/* showRaidDetails 상태에 따라 목록 또는 상세 정보 표시 */}
             {!showRaidDetails ? (
               <>
@@ -506,7 +495,6 @@ export default function RaidManager() {
                 {/* 공격대 목록 */}
                 <div ref={raidListRef} className="mb-4 space-y-2 max-h-[200px] overflow-y-auto">
                   {raids.map(raid => {
-                    // 각 공격대의 현재 인원 계산
                     const totalMembers = 
                       raid.party1.dealers.length + (raid.party1.support ? 1 : 0) +
                       raid.party2.dealers.length + (raid.party2.support ? 1 : 0);
@@ -527,7 +515,6 @@ export default function RaidManager() {
                         }`}
                       >
                         <div className="flex items-center">
-                          {/* 모집 상태 시각화 */}
                           <div className={`w-3 h-3 rounded-full mr-2 ${indicatorColor}`}></div>
                           <div>
                             <div className="font-semibold">{raid.name}</div>
@@ -590,14 +577,14 @@ export default function RaidManager() {
                       {/* 딜러 슬롯 */}
                       <div className="mb-3">
                         <div className="text-sm text-gray-400 mb-2">딜러 (3명)</div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2"> {/* grid-cols-1 sm:grid-cols-3 추가 */}
                           {[0, 1, 2].map(index => {
                             const dealer = currentRaid[`party${partyNum}`].dealers[index];
                             return (
                               <div
                                 key={index} 
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, partyNum, 'dealer')}
+                                // onDragOver={handleDragOver} // 드래그앤드롭 제거
+                                // onDrop={(e) => handleDrop(e, partyNum, 'dealer')} // 드래그앤드롭 제거
                                 className="p-2 bg-gray-600 rounded border-2 border-dashed border-gray-500 min-h-[70px] relative"
                               >
                                 {dealer ? (
@@ -615,7 +602,7 @@ export default function RaidManager() {
                                     </button>
                                   </>
                                 ) : (
-                                  <div className="text-xs text-gray-500 text-center mt-2">드래그하여 배치</div>
+                                  <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> {/* 텍스트 변경 */}
                                 )}
                               </div>
                             );
@@ -627,8 +614,8 @@ export default function RaidManager() {
                       <div>
                         <div className="text-sm text-gray-400 mb-2">서포터 (1명)</div>
                         <div
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, partyNum, 'support')}
+                          // onDragOver={handleDragOver} // 드래그앤드롭 제거
+                          // onDrop={(e) => handleDrop(e, partyNum, 'support')} // 드래그앤드롭 제거
                           className="p-2 bg-gray-600 rounded border-2 border-dashed border-gray-500 min-h-[70px] relative"
                         >
                           {currentRaid[`party${partyNum}`].support ? (
@@ -650,7 +637,7 @@ export default function RaidManager() {
                               </button>
                             </>
                           ) : (
-                            <div className="text-xs text-gray-500 text-center mt-2">드래그하여 배치</div>
+                            <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> {/* 텍스트 변경 */}
                           )}
                         </div>
                       </div>
@@ -733,6 +720,53 @@ export default function RaidManager() {
                   취소
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 캐릭터 할당 모달 */}
+        {showAssignModal && characterToAssign && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 p-6 rounded-lg max-w-sm w-full"> {/* max-w-sm으로 줄임 */}
+              <h3 className="text-xl font-semibold mb-4">
+                '{characterToAssign.displayName || characterToAssign.CharacterName}' 할당
+              </h3>
+              <div className="space-y-4">
+                {/* 파티 선택 */}
+                {[1, 2].map(partyNum => (
+                  <div key={partyNum} className="bg-gray-700 p-3 rounded-md">
+                    <h4 className="font-medium mb-2">{partyNum}파티</h4>
+                    <div className="flex gap-2">
+                      {/* 딜러 슬롯 할당 버튼 */}
+                      <button
+                        onClick={() => assignCharacterToParty(partyNum, 'dealer')}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm"
+                        disabled={currentRaid[`party${partyNum}`].dealers.length >= 3}
+                      >
+                        딜러로 추가 ({currentRaid[`party${partyNum}`].dealers.length}/3)
+                      </button>
+                      {/* 서포터 슬롯 할당 버튼 */}
+                      <button
+                        onClick={() => assignCharacterToParty(partyNum, 'support')}
+                        className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm"
+                        disabled={currentRaid[`party${partyNum}`].support !== null}
+                      >
+                        서포터로 추가 ({currentRaid[`party${partyNum}`].support ? '1/1' : '0/1'})
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setCharacterToAssign(null);
+                  setError('');
+                }}
+                className="mt-6 w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors"
+              >
+                취소
+              </button>
             </div>
           </div>
         )}
