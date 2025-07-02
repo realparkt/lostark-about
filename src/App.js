@@ -424,12 +424,12 @@ export default function RaidManager() {
                 onChange={(e) => setCharacterName(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && searchCharacter()}
                 placeholder="캐릭터명 입력"
-                className="flex-1 px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-base" {/* text-base 추가 */}
+                className="flex-1 px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-base" 
               />
               <button
                 onClick={searchCharacter}
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-base" {/* text-base 추가 */}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-base" 
               >
                 {loading ? '조회중...' : '조회'}
               </button>
@@ -602,7 +602,7 @@ export default function RaidManager() {
                                     </button>
                                   </>
                                 ) : (
-                                  <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> {/* 텍스트 변경 */}
+                                  <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> 
                                 )}
                               </div>
                             );
@@ -637,7 +637,7 @@ export default function RaidManager() {
                               </button>
                             </>
                           ) : (
-                            <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> {/* 텍스트 변경 */}
+                            <div className="text-xs text-gray-500 text-center mt-2">클릭하여 추가</div> 
                           )}
                         </div>
                       </div>
