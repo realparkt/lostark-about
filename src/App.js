@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft } from 'lucide-react'; 
 
 // API 키를 환경 변수에서 불러옵니다.
-// Vercel에서 REACT_APP_LOSTARK_API_KEY 이름으로 환경 변수를 설정해주세요.
 const API_KEY = process.env.REACT_APP_LOSTARK_API_KEY; 
 
 export default function RaidManager() {
+  // 컴포넌트 렌더링 시작 로그 (매 렌더링마다 호출됨)
+  console.log('RaidManager Component Rendered. Current API_KEY state:', API_KEY ? API_KEY.substring(0, 10) + '...' : 'NOT SET');
+
   const [characterName, setCharacterName] = useState('');
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -22,36 +24,47 @@ export default function RaidManager() {
   // useRef를 사용하여 공격대 목록 컨테이너에 접근
   const raidListRef = useRef(null); 
 
-  // API 키가 설정되지 않았을 때 에러 메시지
+  // API 키 초기 확인 및 에러 메시지 설정
   useEffect(() => {
+    console.log('useEffect [API_KEY check]: Triggered.');
     if (!API_KEY) {
       setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수 (REACT_APP_LOSTARK_API_KEY)를 확인해주세요.');
+      console.error('useEffect [API_KEY check]: API_KEY is undefined or empty!');
+    } else {
+      console.log('useEffect [API_KEY check]: API_KEY is set. Length:', API_KEY.length);
+      // API 키의 시작과 끝 부분을 로깅하여 정확성 확인
+      console.log('useEffect [API_KEY check]: API_KEY start:', API_KEY.substring(0, 5), 'end:', API_KEY.substring(API_KEY.length - 5));
     }
   }, []); 
 
   // 저장된 공격대 불러오기
   useEffect(() => {
+    console.log('useEffect [Load saved raids]: Triggered.');
     if (typeof window !== 'undefined') {
       const savedRaids = localStorage.getItem('lostarkRaids');
       if (savedRaids) {
         try {
           const parsedRaids = JSON.parse(savedRaids);
           setRaids(parsedRaids);
-          // 앱 로드 시 첫 번째 공격대가 있다면 선택하고 상세 정보 표시
           if (parsedRaids.length > 0 && !selectedRaid) {
               setSelectedRaid(parsedRaids[0].id);
               setShowRaidDetails(true); 
           }
+          console.log('useEffect [Load saved raids]: Successfully loaded saved raids. Count:', parsedRaids.length);
         } catch (e) {
-          console.error('Failed to parse saved raids:', e);
+          console.error('useEffect [Load saved raids]: Failed to parse saved raids:', e);
         }
+      } else {
+        console.log('useEffect [Load saved raids]: No saved raids found.');
       }
     }
   }, []); 
 
   // 공격대 출발 일시 24시간 이후 자동 삭제 기능
   useEffect(() => {
+    console.log('useEffect [Expired raids check interval]: Setting up interval.');
     const checkExpiredRaids = () => {
+      console.log('checkExpiredRaids: Running expired raids check.');
       const now = new Date();
       const filteredRaids = raids.filter(raid => {
         const raidDateTime = new Date(raid.dateTime);
@@ -60,34 +73,40 @@ export default function RaidManager() {
       });
       
       if (filteredRaids.length !== raids.length) {
+        console.log('checkExpiredRaids: Expired raids found. Removing...');
         setRaids(filteredRaids);
         if (typeof window !== 'undefined') {
           localStorage.setItem('lostarkRaids', JSON.stringify(filteredRaids));
         }
-        // 삭제된 공격대가 선택된 공격대였다면 선택 해제 및 목록으로 돌아가기
         if (selectedRaid && !filteredRaids.some(raid => raid.id === selectedRaid)) {
             setSelectedRaid(null);
             setShowRaidDetails(false); 
         }
-        console.log('만료된 공격대 삭제 완료.');
+        console.log('checkExpiredRaids: Expired raids removed. New raids count:', filteredRaids.length); 
+      } else {
+        console.log('checkExpiredRaids: No expired raids found.');
       }
     };
 
-    // 1분마다 체크
     const intervalId = setInterval(checkExpiredRaids, 60000); 
-    // 컴포넌트 언마운트 시 또는 raids가 변경될 때 setInterval 클리어
-    return () => clearInterval(intervalId);
+    return () => {
+      console.log('useEffect [Expired raids check interval]: Cleaning up interval.');
+      clearInterval(intervalId);
+    };
   }, [raids, selectedRaid]); 
 
   // 캐릭터 검색
   const searchCharacter = async () => {
+    console.log('searchCharacter: Function called.');
     if (!API_KEY) { 
       setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수를 확인해주세요.');
+      console.error('searchCharacter: API_KEY is missing, cannot proceed with fetch.');
       return;
     }
 
     if (!characterName) {
       setError('캐릭터명을 입력해주세요.');
+      console.warn('searchCharacter: Character name is empty, cannot search.');
       return;
     }
 
@@ -95,19 +114,23 @@ export default function RaidManager() {
     setError('');
     
     try {
-      // API 요청 URL: Curl로 성공한 경로인 '/characters/' 사용
-      const response = await fetch(
-        `/characters/${encodeURIComponent(characterName)}/siblings`, 
-        {
-          headers: {
-            'accept': 'application/json',
-            'authorization': `bearer ${API_KEY}`
-          }
-        }
-      );
+      const requestUrl = `/characters/${encodeURIComponent(characterName)}/siblings`;
+      console.log('searchCharacter: Attempting to fetch from URL:', requestUrl);
+      console.log('searchCharacter: Authorization header (truncated):', `bearer ${API_KEY.substring(0,10)}...`);
 
-      // 응답이 OK가 아니면 에러 처리
+      const response = await fetch(requestUrl, {
+        headers: {
+          'accept': 'application/json',
+          'authorization': `bearer ${API_KEY}`
+        }
+      });
+
+      console.log('searchCharacter: API Response received. Status:', response.status);
+
       if (!response.ok) {
+        const errorText = await response.text(); 
+        console.error('searchCharacter: API Response NOT OK. Raw response text (truncated):', errorText.substring(0, 500)); // HTML 응답 내용 확인
+        
         let errorMessage = '캐릭터 정보를 가져올 수 없습니다. 다시 시도해주세요.';
         if (response.status === 400) {
             errorMessage = '잘못된 요청입니다. 캐릭터명을 확인해주세요.';
@@ -123,16 +146,27 @@ export default function RaidManager() {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json(); 
+      let data;
+      try {
+        data = await response.json(); // 여기서 'Unexpected token' 오류 발생
+        console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', JSON.stringify(data).substring(0, 200) + '...');
+      } catch (jsonError) {
+        const rawResponseText = await response.text(); // JSON 파싱 실패 시 원본 텍스트 다시 가져오기
+        console.error('searchCharacter: JSON parsing failed!', jsonError);
+        console.error('searchCharacter: Raw response text that caused JSON error (truncated):', rawResponseText.substring(0, 500));
+        setError(`데이터 파싱 오류: ${jsonError.message}. 서버 응답을 확인해주세요.`);
+        setApiStatus('Fetch Failed - JSON Error');
+        return; // JSON 파싱 실패 시 함수 종료
+      }
       
       if (!data || data.length === 0) {
         setError('해당 캐릭터 또는 연관 캐릭터를 찾을 수 없습니다.');
         setCharacters([]);
+        console.log('searchCharacter: No characters found in data.');
       } else {
         let highestIlvlChar = null;
         let highestIlvl = -1;
         
-        // ItemAvgLevel은 "1,661.67"과 같은 문자열이므로 숫자로 변환하여 비교합니다.
         const parsedData = data.map(char => ({
           ...char,
           parsedIlvl: parseFloat(char.ItemAvgLevel.replace(/,/g, ''))
@@ -145,14 +179,11 @@ export default function RaidManager() {
           }
         });
 
-        // 아이템 레벨 가장 높은 캐릭터와 배럭 이름 변경 로직
         const transformedCharacters = parsedData.map(char => {
             const mainCharName = highestIlvlChar ? highestIlvlChar.CharacterName : '';
             if (char.CharacterName === mainCharName) {
-                // 가장 높은 레벨 캐릭터는 원래 이름 그대로 표시
                 return { ...char, displayName: char.CharacterName }; 
             } else {
-                // 그 외 캐릭터는 '실제캐릭터이름 (메인캐릭터이름)' 형태로 표시
                 return { 
                     ...char, 
                     displayName: `${char.CharacterName} (${mainCharName})` 
@@ -160,24 +191,28 @@ export default function RaidManager() {
             }
         });
 
-        // 아이템 레벨 기준으로 내림차순 정렬
-        transformedCharacters.sort((a, b) => b.parsedIlvl - a.parsedIlvl);
+        transformedCharacters.sort((a, b) => b.parsedIlvl - a.parsedIlvl); 
 
         setCharacters(transformedCharacters);
         setError(''); 
+        console.log('searchCharacter: Characters successfully processed and set. Count:', transformedCharacters.length);
       }
     } catch (err) {
+      console.error('searchCharacter: Error during fetch or processing:', err); 
       setError(err.message);
       setCharacters([]);
     } finally {
       setLoading(false);
+      console.log('searchCharacter: Function finished.');
     }
   };
 
   // 공격대 생성
   const createRaid = () => {
+    console.log('createRaid: Function called.');
     if (!newRaidName || !newRaidDate || !newRraidTime) {
       setError('모든 정보를 입력해주세요.');
+      console.warn('createRaid: Missing raid creation info.');
       return;
     }
 
@@ -186,6 +221,7 @@ export default function RaidManager() {
 
     if (isNaN(newDate.getTime())) { 
         setError('유효하지 않은 날짜 또는 시간 형식입니다. 올바른 날짜와 시간을 선택해주세요.');
+        console.error('createRaid: Invalid date/time format.');
         return;
     }
     
@@ -201,6 +237,7 @@ export default function RaidManager() {
     setRaids(updatedRaids);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lostarkRaids', JSON.stringify(updatedRaids));
+      console.log('createRaid: Raid saved to localStorage.');
     }
     
     setNewRaidName('');
@@ -210,33 +247,36 @@ export default function RaidManager() {
     setSelectedRaid(newRaid.id); 
     setError(''); 
 
-    // 공격대 생성 후 상세 정보 화면으로 전환
     setShowRaidDetails(true); 
 
-    // 공격대 생성 후 목록의 맨 아래로 스크롤 (DOM 업데이트 후 실행)
     setTimeout(() => {
         if (raidListRef.current) {
             raidListRef.current.scrollTop = raidListRef.current.scrollHeight;
+            console.log('createRaid: Scrolled raid list to bottom.');
         }
     }, 0);
+    console.log('createRaid: Raid created and selected:', newRaid); 
   };
 
   // 공격대 삭제
   const deleteRaid = (raidId) => {
+    console.log('deleteRaid: Function called for ID:', raidId);
     const updatedRaids = raids.filter(raid => raid.id !== raidId);
     setRaids(updatedRaids);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lostarkRaids', JSON.stringify(updatedRaids));
+      console.log('deleteRaid: Raid removed from localStorage.');
     }
     if (selectedRaid === raidId) {
-      // 삭제된 공격대가 선택된 공격대였다면, 다른 공격대를 선택하거나 선택 해제
       setSelectedRaid(updatedRaids.length > 0 ? updatedRaids[0].id : null);
-      setShowRaidDetails(false); // 삭제 후 목록 화면으로 돌아가기
+      setShowRaidDetails(false); 
     }
+    console.log('deleteRaid: Raid deleted. Remaining raids:', updatedRaids.length); 
   };
 
   // 드래그 앤 드롭 핸들러
   const handleDragStart = (e, character) => {
+    console.log('handleDragStart: Dragging character:', character.displayName || character.CharacterName);
     e.dataTransfer.setData('text/plain', JSON.stringify(character));
     setDraggedCharacter(character); 
   };
@@ -246,18 +286,23 @@ export default function RaidManager() {
   };
 
   const handleDrop = (e, partyNum, slot) => {
+    console.log('handleDrop: Called for Party:', partyNum, 'Slot:', slot);
     e.preventDefault();
     const droppedCharacterData = e.dataTransfer.getData('text/plain');
     let droppedCharacter;
     try {
         droppedCharacter = JSON.parse(droppedCharacterData);
+        console.log('handleDrop: Successfully parsed dropped character:', droppedCharacter.displayName || droppedCharacter.CharacterName);
     } catch (error) {
-        console.error("Failed to parse dragged character data:", error);
+        console.error("handleDrop: Failed to parse dragged character data:", error);
+        setError("드래그한 캐릭터 데이터를 읽을 수 없습니다.");
         return; 
     }
 
-
-    if (!droppedCharacter || !selectedRaid) return;
+    if (!droppedCharacter || !selectedRaid) {
+      console.warn('handleDrop: No dropped character or no raid selected.');
+      return;
+    }
 
     const updatedRaids = raids.map(raid => {
       if (raid.id === selectedRaid) {
@@ -267,20 +312,26 @@ export default function RaidManager() {
         ['party1', 'party2'].forEach(partyKey => {
           if (updatedRaid[partyKey].support?.CharacterName === droppedCharacter.CharacterName) {
             updatedRaid[partyKey].support = null;
+            console.log('handleDrop: Removed from support slot in', partyKey);
           }
           updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
             d => d.CharacterName !== droppedCharacter.CharacterName
           );
+          if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) {
+            console.log('handleDrop: Removed from dealer slot in', partyKey);
+          }
         });
 
-        // 새 위치에 배치
         if (slot === 'support') {
           updatedRaid[`party${partyNum}`].support = droppedCharacter;
-        } else { // 딜러 슬롯
+          console.log('handleDrop: Added to support slot in party', partyNum);
+        } else { 
           if (updatedRaid[`party${partyNum}`].dealers.length < 3) {
             updatedRaid[`party${partyNum}`].dealers.push(droppedCharacter);
+            console.log('handleDrop: Added to dealer slot in party', partyNum);
           } else {
             setError('딜러 슬롯이 꽉 찼습니다. 기존 캐릭터를 먼저 제거해주세요.');
+            console.warn('handleDrop: Dealer slot full in party', partyNum);
             return updatedRaid; 
           }
         }
@@ -293,18 +344,21 @@ export default function RaidManager() {
     setRaids(updatedRaids);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lostarkRaids', JSON.stringify(updatedRaids));
+      console.log('handleDrop: Raid updated in localStorage.');
     }
     setDraggedCharacter(null); 
+    console.log('handleDrop: Function finished.');
   };
 
   // 캐릭터 제거 (슬롯에서)
   const removeCharacter = (partyNum, slot, index = null) => {
+    console.log('removeCharacter: Called. Party:', partyNum, 'Slot:', slot, 'Index:', index);
     const updatedRaids = raids.map(raid => {
       if (raid.id === selectedRaid) {
         const updatedRaid = { ...raid };
         if (slot === 'support') {
           updatedRaid[`party${partyNum}`].support = null;
-        } else { // dealer
+        } else { 
           updatedRaid[`party${partyNum}`].dealers.splice(index, 1);
         }
         return updatedRaid;
@@ -315,7 +369,9 @@ export default function RaidManager() {
     setRaids(updatedRaids);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lostarkRaids', JSON.stringify(updatedRaids));
+      console.log('removeCharacter: Raid updated in localStorage after removal.');
     }
+    console.log('removeCharacter: Character removed from slot.');
   };
 
   const currentRaid = raids.find(raid => raid.id === selectedRaid);
@@ -336,6 +392,7 @@ export default function RaidManager() {
   // 모달 오픈 시 현재 날짜/시간으로 초기값 설정
   useEffect(() => {
     if (showCreateModal && !newRaidDate && !newRraidTime) {
+      console.log('useEffect [Modal init]: Setting initial modal date/time.');
       const today = new Date();
       const year = today.getFullYear();
       const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -351,6 +408,7 @@ export default function RaidManager() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto">
+      {console.log('RaidManager: Rendering JSX output.')} {/* JSX 렌더링 직전 로그 */}
       <div className="min-w-[1024px] max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold mb-8 text-center">about 공격대 관리</h1>
         
@@ -533,7 +591,6 @@ export default function RaidManager() {
                                   <>
                                     <div className="text-xs font-semibold">{dealer.displayName || dealer.CharacterName}</div>
                                     <div className="text-xs text-gray-400">{dealer.CharacterClassName}</div>
-                                    {/* Lv.과 아이템 레벨 추가 */}
                                     <div className="text-xs text-gray-500">
                                       Lv.{dealer.CharacterLevel} / IL.{dealer.ItemAvgLevel}
                                     </div>
@@ -569,7 +626,6 @@ export default function RaidManager() {
                               <div className="text-xs text-gray-400">
                                 {currentRaid[`party${partyNum}`].support.CharacterClassName}
                               </div>
-                              {/* Lv.과 아이템 레벨 추가 */}
                               <div className="text-xs text-gray-500">
                                 Lv.{currentRaid[`party${partyNum}`].support.CharacterLevel} / IL.{currentRaid[`party${partyNum}`].support.ItemAvgLevel}
                               </div>
