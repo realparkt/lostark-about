@@ -46,9 +46,10 @@ export default function RaidManager() {
         try {
           const parsedRaids = JSON.parse(savedRaids);
           setRaids(parsedRaids);
-          if (parsedRaids.length > 0 && !selectedRaid) {
+          // 앱 로드 시 첫 번째 공격대가 있다면 선택 (선택만 하고 상세 페이지는 열지 않음)
+          if (parsedRaids.length > 0) { // !selectedRaid 조건은 제거
               setSelectedRaid(parsedRaids[0].id);
-              setShowRaidDetails(true); 
+              // setShowRaidDetails(true); // 이 줄을 제거하여 초기 로드 시 상세 페이지가 열리지 않도록 함
           }
           console.log('useEffect [Load saved raids]: Successfully loaded saved raids. Count:', parsedRaids.length);
         } catch (e) {
@@ -58,6 +59,8 @@ export default function RaidManager() {
         console.log('useEffect [Load saved raids]: No saved raids found.');
       }
     }
+    // 앱 로드 시 항상 목록 화면으로 시작하도록 강제
+    setShowRaidDetails(false); 
   }, []); 
 
   // 공격대 출발 일시 24시간 이후 자동 삭제 기능
@@ -127,32 +130,25 @@ export default function RaidManager() {
 
       console.log('searchCharacter: API Response received. Status:', response.status);
 
-      // 응답 본문을 한 번만 읽고 변수에 저장
-      // response.ok가 true일 경우 JSON으로, false일 경우 텍스트로 처리
-      const contentType = response.headers.get('content-type');
-      let data;
-      let responseBodyText = '';
+      // 응답 본문을 한 번만 텍스트로 읽어옵니다.
+      const responseBodyText = await response.text(); 
+      console.log('searchCharacter: Raw response text (truncated):', responseBodyText.substring(0, 500));
 
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          data = await response.json(); // JSON으로 파싱 시도
-          responseBodyText = JSON.stringify(data); // 로깅을 위해 텍스트로 변환
-          console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', responseBodyText.substring(0, 200) + '...');
-        } catch (jsonError) {
-          // JSON 파싱 실패 시, 원본 텍스트로 다시 읽어오지 않고 에러 처리
-          console.error('searchCharacter: JSON parsing failed on expected JSON response!', jsonError);
-          setError(`데이터 파싱 오류: 서버가 유효한 JSON을 반환하지 않았습니다.`);
-          return; 
-        }
-      } else {
-        // JSON이 아닌 경우 (예: HTML 오류 페이지), 텍스트로 읽음
-        responseBodyText = await response.text();
-        console.log('searchCharacter: Non-JSON response. Raw text (truncated):', responseBodyText.substring(0, 500));
+      let data;
+      try {
+        // 읽어온 텍스트를 JSON으로 파싱 시도
+        data = JSON.parse(responseBodyText); 
+        console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', JSON.stringify(data).substring(0, 200) + '...');
+      } catch (jsonError) {
+        // JSON 파싱 실패 시 (예: 서버가 HTML 오류 페이지를 반환한 경우)
+        console.error('searchCharacter: JSON parsing failed!', jsonError);
+        setError(`데이터 파싱 오류: 서버가 유효한 JSON을 반환하지 않았습니다. 응답 내용: ${responseBodyText.substring(0, 100)}...`);
+        return; // JSON 파싱 실패 시 함수 종료
       }
 
       if (!response.ok) {
-        // response.ok가 false일 경우, 본문은 에러 메시지(HTML)일 가능성이 높음
-        console.error('searchCharacter: API Response NOT OK. Raw response text (truncated):', responseBodyText.substring(0, 500));
+        // response.ok가 false일 경우 (HTTP 상태 코드 2xx가 아님)
+        console.error('searchCharacter: API Response NOT OK. HTTP Status:', response.status);
         
         let errorMessage = '캐릭터 정보를 가져올 수 없습니다. 다시 시도해주세요.';
         if (response.status === 400) {
@@ -332,7 +328,7 @@ export default function RaidManager() {
           updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
             d => d.CharacterName !== droppedCharacter.CharacterName
           );
-          if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) { // 오타 수정: updatedRask -> updatedRaid
+          if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) { 
             console.log('handleDrop: Removed from dealer slot in', partyKey);
           }
         });
