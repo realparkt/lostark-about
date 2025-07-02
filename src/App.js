@@ -15,14 +15,16 @@ export default function RaidManager() {
   const [loading, setLoading] = useState(false); // 로딩 상태
   const [error, setError] = useState(''); // 에러 메시지
   const [raids, setRaids] = useState([]); // 생성된 공격대 목록
-  const [selectedRaid, setSelectedRaid] = useState(null); // 현재 선택된 공격대 ID
+  const [selectedRaid, setSelectedRaid] = useState(null); // 현재 선택된 공격대 ID (뷰잉/할당 대상)
   const [showCreateModal, setShowCreateModal] = useState(false); // 공격대 생성 모달 표시 여부
   const [newRaidName, setNewRaidName] = useState(''); // 새 공격대 이름
   const [newRaidDate, setNewRaidDate] = useState(''); // 새 공격대 날짜
   const [newRraidTime, setNewRaidTime] = useState(''); // 새 공격대 시간
-  // 드래그앤드롭 대신 클릭으로 캐릭터 할당을 위한 상태
+  
+  // 캐릭터 할당을 위한 상태 (클릭 할당)
   const [characterToAssign, setCharacterToAssign] = useState(null); // 할당할 캐릭터 정보
-  const [showAssignModal, setShowAssignModal] = useState(false); // 캐릭터 할당 모달 표시 여부
+  const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false); // 공격대 선택 모달 표시 여부 (새로 추가)
+  const [showAssignModal, setShowAssignModal] = useState(false); // 캐릭터 파티 할당 모달 표시 여부
 
   const [showRaidDetails, setShowRaidDetails] = useState(false); // 공격대 상세 정보 표시 여부 (모바일용)
 
@@ -52,7 +54,7 @@ export default function RaidManager() {
         try {
           const parsedRaids = JSON.parse(savedRaids);
           setRaids(parsedRaids);
-          // 저장된 공격대가 있다면 첫 번째 공격대를 기본으로 선택
+          // 저장된 공격대가 있다면 첫 번째 공격대를 기본으로 선택 (뷰잉 목적)
           if (parsedRaids.length > 0) {
               setSelectedRaid(parsedRaids[0].id);
           }
@@ -271,7 +273,7 @@ export default function RaidManager() {
     setNewRaidDate('');
     setNewRaidTime('');
     setShowCreateModal(false);
-    setSelectedRaid(newRaid.id); // 새로 생성된 공격대를 선택
+    setSelectedRaid(newRaid.id); // 새로 생성된 공격대를 선택 (뷰잉 목적)
     setError(''); // 에러 메시지 초기화
 
     setShowRaidDetails(true); // 새 공격대 생성 후 바로 상세 정보 표시
@@ -304,14 +306,23 @@ export default function RaidManager() {
     console.log('deleteRaid: 공격대 삭제됨. 남은 공격대:', updatedRaids.length); 
   };
 
-  // 모바일용: 캐릭터를 선택하여 할당 모달 열기
+  // 캐릭터를 선택하여 공격대 선택 모달 열기 (기존 handleSelectCharacterToAssign 변경)
   const handleSelectCharacterToAssign = (character) => {
     setCharacterToAssign(character); // 할당할 캐릭터 설정
-    setShowAssignModal(true); // 할당 모달 열기
-    console.log('handleSelectCharacterToAssign: 할당할 캐릭터 선택됨:', character.displayName);
+    setShowRaidSelectionModal(true); // 공격대 선택 모달 열기
+    console.log('handleSelectCharacterToAssign: 할당할 캐릭터 선택됨. 공격대 선택 모달 열기:', character.displayName);
   };
 
-  // 모바일용: 캐릭터를 파티에 할당
+  // 공격대 선택 모달에서 공격대를 선택했을 때 호출되는 함수 (새로 추가)
+  const handleRaidSelectedForAssignment = (raidId) => {
+    setSelectedRaid(raidId); // 할당할 공격대를 selectedRaid로 설정
+    setShowRaidSelectionModal(false); // 공격대 선택 모달 닫기
+    setShowAssignModal(true); // 파티 할당 모달 열기
+    setError(''); // 에러 메시지 초기화
+    console.log('handleRaidSelectedForAssignment: 할당할 공격대 선택됨:', raidId);
+  };
+
+  // 캐릭터를 파티에 할당
   const assignCharacterToParty = (partyNum, slot) => {
     // 할당할 캐릭터가 없거나 선택된 공격대가 없으면 함수 종료
     if (!characterToAssign || !selectedRaid) return;
@@ -365,7 +376,7 @@ export default function RaidManager() {
       console.log('assignCharacterToParty: 공격대 로컬 스토리지에 업데이트됨.');
     }
     setCharacterToAssign(null); // 할당할 캐릭터 초기화
-    setShowAssignModal(false); // 모달 닫기
+    setShowAssignModal(false); // 파티 할당 모달 닫기
     console.log('assignCharacterToParty: 할당 완료.');
   };
 
@@ -432,7 +443,7 @@ export default function RaidManager() {
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto font-inter"> {/* Inter 폰트 적용 */}
       {console.log('RaidManager: JSX 출력 렌더링 중.')} 
       <div className="min-w-full md:min-w-[1024px] max-w-7xl mx-auto"> {/* 최소 너비 및 중앙 정렬 */}
-        <h1 className="text-3xl font-bold mb-8 text-center">about 전용 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">어바웃 공격대 관리</h1>
         
         {/* 에러 메시지 표시 */}
         {error && (
@@ -489,16 +500,14 @@ export default function RaidManager() {
                       아이템 레벨: {char.ItemAvgLevel}
                     </div>
                   </div>
-                  {/* 모바일용: 파티에 추가 버튼 (선택된 공격대가 있을 때만 표시) */}
-                  {selectedRaid && ( 
-                    <button
-                      onClick={() => handleSelectCharacterToAssign(char)}
-                      className="ml-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 rounded-md text-sm flex items-center font-medium"
-                    >
-                      <UserPlus size={16} className="mr-1" />
-                      추가
-                    </button>
-                  )}
+                  {/* 파티에 추가 버튼 (이제 항상 표시) */}
+                  <button
+                    onClick={() => handleSelectCharacterToAssign(char)}
+                    className="ml-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 rounded-md text-sm flex items-center font-medium"
+                  >
+                    <UserPlus size={16} className="mr-1" />
+                    추가
+                  </button>
                 </div>
               ))}
             </div>
@@ -752,12 +761,54 @@ export default function RaidManager() {
           </div>
         )}
 
-        {/* 캐릭터 할당 모달 */}
-        {showAssignModal && characterToAssign && (
+        {/* 새로 추가된 공격대 선택 모달 */}
+        {showRaidSelectionModal && characterToAssign && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full shadow-2xl transform scale-100 animate-scale-in">
+              <h3 className="text-xl font-semibold mb-4">
+                '{characterToAssign.displayName || characterToAssign.CharacterName}'을(를) 할당할 공격대 선택
+              </h3>
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                {raids.length === 0 ? (
+                  <div className="text-center text-gray-500 py-4">
+                    생성된 공격대가 없습니다. 먼저 공격대를 만들어주세요.
+                  </div>
+                ) : (
+                  raids.map(raid => (
+                    <button
+                      key={raid.id}
+                      onClick={() => handleRaidSelectedForAssignment(raid.id)}
+                      className="w-full text-left p-3 bg-gray-700 hover:bg-blue-600 rounded-md transition-colors shadow-sm"
+                    >
+                      <div className="font-semibold">{raid.name}</div>
+                      <div className="text-sm text-gray-300 flex items-center">
+                        <Clock className="mr-1" size={14} />
+                        {formatDateTime(raid.dateTime)}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setShowRaidSelectionModal(false);
+                  setCharacterToAssign(null);
+                  setError('');
+                }}
+                className="mt-6 w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 캐릭터 할당 모달 (기존 모달) */}
+        {showAssignModal && characterToAssign && currentRaid && ( // currentRaid가 유효한지 확인
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
             <div className="bg-gray-800 p-6 rounded-lg max-w-sm w-full shadow-2xl transform scale-100 animate-scale-in">
               <h3 className="text-xl font-semibold mb-4">
-                '{characterToAssign.displayName || characterToAssign.CharacterName}' 할당
+                '{characterToAssign.displayName || characterToAssign.CharacterName}'을(를) '{currentRaid.name}'에 할당
               </h3>
               <div className="space-y-4">
                 {/* 파티 선택 버튼 */}
@@ -769,17 +820,17 @@ export default function RaidManager() {
                       <button
                         onClick={() => assignCharacterToParty(partyNum, 'dealer')}
                         className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
-                        disabled={currentRaid && currentRaid[`party${partyNum}`].dealers.length >= 3}
+                        disabled={currentRaid[`party${partyNum}`].dealers.length >= 3}
                       >
-                        딜러로 추가 ({currentRaid ? currentRaid[`party${partyNum}`].dealers.length : 0}/3)
+                        딜러로 추가 ({currentRaid[`party${partyNum}`].dealers.length}/3)
                       </button>
                       {/* 서포터 슬롯 할당 버튼 */}
                       <button
                         onClick={() => assignCharacterToParty(partyNum, 'support')}
                         className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm font-medium shadow-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
-                        disabled={currentRaid && currentRaid[`party${partyNum}`].support !== null}
+                        disabled={currentRaid[`party${partyNum}`].support !== null}
                       >
-                        서포터로 추가 ({currentRaid ? (currentRaid[`party${partyNum}`].support ? '1/1' : '0/1') : '0/1'})
+                        서포터로 추가 ({currentRaid[`party${partyNum}`].support ? '1/1' : '0/1'})
                       </button>
                     </div>
                   </div>
