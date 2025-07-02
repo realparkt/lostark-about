@@ -128,8 +128,27 @@ export default function RaidManager() {
       console.log('searchCharacter: API Response received. Status:', response.status);
 
       // 응답 본문을 한 번만 읽고 변수에 저장
-      const responseBodyText = await response.text(); 
-      console.log('searchCharacter: Raw response text (truncated):', responseBodyText.substring(0, 500));
+      // response.ok가 true일 경우 JSON으로, false일 경우 텍스트로 처리
+      const contentType = response.headers.get('content-type');
+      let data;
+      let responseBodyText = '';
+
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json(); // JSON으로 파싱 시도
+          responseBodyText = JSON.stringify(data); // 로깅을 위해 텍스트로 변환
+          console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', responseBodyText.substring(0, 200) + '...');
+        } catch (jsonError) {
+          // JSON 파싱 실패 시, 원본 텍스트로 다시 읽어오지 않고 에러 처리
+          console.error('searchCharacter: JSON parsing failed on expected JSON response!', jsonError);
+          setError(`데이터 파싱 오류: 서버가 유효한 JSON을 반환하지 않았습니다.`);
+          return; 
+        }
+      } else {
+        // JSON이 아닌 경우 (예: HTML 오류 페이지), 텍스트로 읽음
+        responseBodyText = await response.text();
+        console.log('searchCharacter: Non-JSON response. Raw text (truncated):', responseBodyText.substring(0, 500));
+      }
 
       if (!response.ok) {
         // response.ok가 false일 경우, 본문은 에러 메시지(HTML)일 가능성이 높음
@@ -147,23 +166,14 @@ export default function RaidManager() {
         } else if (response.status >= 500) {
             errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
         }
+        // HTML 응답의 경우, HTML 내용을 에러 메시지에 포함 (보안상 주의)
+        if (responseBodyText.startsWith('<!doctype html>')) {
+            errorMessage += ` (서버 응답: ${responseBodyText.substring(0, 100)}...)`;
+        }
         throw new Error(errorMessage);
       }
-
-      let data;
-      try {
-        // response.ok가 true일 경우, 이전에 읽은 텍스트 본문을 JSON으로 파싱 시도
-        data = JSON.parse(responseBodyText); 
-        console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', JSON.stringify(data).substring(0, 200) + '...');
-      } catch (jsonError) {
-        // JSON 파싱 실패 시, 이미 읽어둔 텍스트 본문을 사용
-        console.error('searchCharacter: JSON parsing failed!', jsonError);
-        console.error('searchCharacter: Raw response text that caused JSON error (truncated):', responseBodyText.substring(0, 500));
-        setError(`데이터 파싱 오류: ${jsonError.message}. 서버 응답을 확인해주세요.`);
-        // setApiStatus('Fetch Failed - JSON Error'); // 이 상태는 필요 없을 수 있음
-        return; 
-      }
       
+      // response.ok가 true이고, 데이터가 성공적으로 파싱된 경우
       if (!data || data.length === 0) {
         setError('해당 캐릭터 또는 연관 캐릭터를 찾을 수 없습니다.');
         setCharacters([]);
@@ -322,7 +332,7 @@ export default function RaidManager() {
           updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
             d => d.CharacterName !== droppedCharacter.CharacterName
           );
-          if (updatedRask[partyKey].dealers.length < raid[partyKey].dealers.length) {
+          if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) { // 오타 수정: updatedRask -> updatedRaid
             console.log('handleDrop: Removed from dealer slot in', partyKey);
           }
         });
