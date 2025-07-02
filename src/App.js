@@ -127,9 +127,13 @@ export default function RaidManager() {
 
       console.log('searchCharacter: API Response received. Status:', response.status);
 
+      // 응답 본문을 한 번만 읽고 변수에 저장
+      const responseBodyText = await response.text(); 
+      console.log('searchCharacter: Raw response text (truncated):', responseBodyText.substring(0, 500));
+
       if (!response.ok) {
-        const errorText = await response.text(); 
-        console.error('searchCharacter: API Response NOT OK. Raw response text (truncated):', errorText.substring(0, 500)); // HTML 응답 내용 확인
+        // response.ok가 false일 경우, 본문은 에러 메시지(HTML)일 가능성이 높음
+        console.error('searchCharacter: API Response NOT OK. Raw response text (truncated):', responseBodyText.substring(0, 500));
         
         let errorMessage = '캐릭터 정보를 가져올 수 없습니다. 다시 시도해주세요.';
         if (response.status === 400) {
@@ -148,15 +152,16 @@ export default function RaidManager() {
 
       let data;
       try {
-        data = await response.json(); // 여기서 'Unexpected token' 오류 발생
+        // response.ok가 true일 경우, 이전에 읽은 텍스트 본문을 JSON으로 파싱 시도
+        data = JSON.parse(responseBodyText); 
         console.log('searchCharacter: Successfully parsed JSON data. Data (truncated):', JSON.stringify(data).substring(0, 200) + '...');
       } catch (jsonError) {
-        const rawResponseText = await response.text(); // JSON 파싱 실패 시 원본 텍스트 다시 가져오기
+        // JSON 파싱 실패 시, 이미 읽어둔 텍스트 본문을 사용
         console.error('searchCharacter: JSON parsing failed!', jsonError);
-        console.error('searchCharacter: Raw response text that caused JSON error (truncated):', rawResponseText.substring(0, 500));
+        console.error('searchCharacter: Raw response text that caused JSON error (truncated):', responseBodyText.substring(0, 500));
         setError(`데이터 파싱 오류: ${jsonError.message}. 서버 응답을 확인해주세요.`);
-        setApiStatus('Fetch Failed - JSON Error');
-        return; // JSON 파싱 실패 시 함수 종료
+        // setApiStatus('Fetch Failed - JSON Error'); // 이 상태는 필요 없을 수 있음
+        return; 
       }
       
       if (!data || data.length === 0) {
@@ -198,7 +203,7 @@ export default function RaidManager() {
         console.log('searchCharacter: Characters successfully processed and set. Count:', transformedCharacters.length);
       }
     } catch (err) {
-      console.error('searchCharacter: Error during fetch or processing:', err); 
+      console.error('searchCharacter: Error during fetch or processing (outer catch):', err); 
       setError(err.message);
       setCharacters([]);
     } finally {
@@ -317,7 +322,7 @@ export default function RaidManager() {
           updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
             d => d.CharacterName !== droppedCharacter.CharacterName
           );
-          if (updatedRaid[partyKey].dealers.length < raid[partyKey].dealers.length) {
+          if (updatedRask[partyKey].dealers.length < raid[partyKey].dealers.length) {
             console.log('handleDrop: Removed from dealer slot in', partyKey);
           }
         });
