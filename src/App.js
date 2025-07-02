@@ -352,7 +352,7 @@ export default function RaidManager() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto">
       <div className="min-w-[1024px] max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-center">로스트아크 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">about 공격대 관리</h1>
         
         {error && (
           <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded-md flex items-center max-w-2xl mx-auto">
