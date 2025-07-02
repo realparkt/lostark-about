@@ -443,7 +443,7 @@ export default function RaidManager() {
     <div className="min-h-screen bg-gray-900 text-white p-4 overflow-x-auto font-inter"> {/* Inter 폰트 적용 */}
       {console.log('RaidManager: JSX 출력 렌더링 중.')} 
       <div className="min-w-full md:min-w-[1024px] max-w-7xl mx-auto"> {/* 최소 너비 및 중앙 정렬 */}
-        <h1 className="text-3xl font-bold mb-8 text-center">어바웃 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">about 공격대 관리</h1>
         
         {/* 에러 메시지 표시 */}
         {error && (
@@ -709,7 +709,7 @@ export default function RaidManager() {
                     type="text"
                     value={newRaidName}
                     onChange={(e) => setNewRaidName(e.target.value)}
-                    placeholder="예: 발탄 하드"
+                    placeholder="예: 1막 하드"
                     className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400"
                   />
                 </div>
