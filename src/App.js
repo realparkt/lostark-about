@@ -678,7 +678,10 @@ export default function RaidManager() {
                                 {currentRaid[`party${partyNum}`].support ? (
                                   <>
                                     <div className="w-full">
-                                      <div className="text-sm font-semibold text-green-300">{currentRaid[`party${partyNum}`].support.displayName}</div>
+                                      <div className="text-sm font-semibold text-green-300 flex items-center justify-center">
+                                        <span>{currentRaid[`party${partyNum}`].support.displayName}</span>
+                                        {currentRaid[`party${partyNum}`].support.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+                                      </div>
                                       <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
                                     </div>
                                     <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
@@ -694,7 +697,10 @@ export default function RaidManager() {
                                     {dealer ? (
                                       <>
                                         <div className="w-full">
-                                          <div className="text-sm font-semibold text-red-300">{dealer.displayName}</div>
+                                          <div className="text-sm font-semibold text-red-300 flex items-center justify-center">
+                                            <span>{dealer.displayName}</span>
+                                            {dealer.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+                                          </div>
                                           <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
                                         </div>
                                         <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
@@ -850,5 +856,5 @@ export default function RaidManager() {
         }
       `}</style>
     </div>
-  );
+  )
 }
