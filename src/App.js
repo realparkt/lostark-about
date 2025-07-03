@@ -4,7 +4,17 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, getDocs } from 'firebase/firestore';
 
-const API_KEY = process.env.REACT_APP_LOSTARK_API_KEY; 
+// Vercel 환경 변수에서 값들을 직접 가져옵니다.
+const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY; 
+
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
 
 export default function RaidManager() {
   const [characterName, setCharacterName] = useState('');
@@ -31,17 +41,27 @@ export default function RaidManager() {
   const raidListRef = useRef(null); 
 
   useEffect(() => {
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+    // 환경 변수에서 Firebase 설정 값들이 모두 있는지 확인합니다.
+    const isFirebaseConfigValid = Object.values(firebaseConfig).every(value => value);
+    
+    if (!isFirebaseConfigValid) {
+        // 내부 미리보기 환경을 위한 대체 로직 (Vercel 배포 시에는 무시됨)
+        const internalConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        try {
+            const internalConfig = JSON.parse(internalConfigStr);
+            if (Object.values(internalConfig).every(v => v)) {
+                initializeApp(internalConfig);
+            } else {
+                throw new Error("Internal config is also invalid.");
+            }
+        } catch (e) {
+            console.error('Firebase config is missing from environment variables.');
+            setError('Firebase 설정이 누락되었습니다. Vercel 환경 변수를 확인해주세요.');
+            return;
+        }
+    }
 
     try {
-      const firebaseConfig = JSON.parse(firebaseConfigStr);
-      if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-        console.error('Firebase config is missing or empty.');
-        setError('Firebase 설정이 누락되었습니다. 앱을 초기화할 수 없습니다.');
-        return;
-      }
-
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
       const firebaseAuth = getAuth(app);
@@ -60,8 +80,8 @@ export default function RaidManager() {
               await signInAnonymously(firebaseAuth);
             }
           } catch (authError) {
-            console.error('Firebase: Anonymous or custom token sign-in failed:', authError);
-            setError('Firebase 인증에 실패했습니다. 앱을 사용할 수 없습니다.');
+            console.error('Firebase: Auth failed:', authError);
+            setError('Firebase 인증에 실패했습니다.');
           }
         }
         if (!isAuthReady) {
@@ -69,38 +89,29 @@ export default function RaidManager() {
         }
       });
 
-      return () => {
-        unsubscribe();
-      };
+      return () => unsubscribe();
     } catch (initError) {
       console.error('Firebase initialization failed:', initError);
-      setError('Firebase 초기화 중 오류가 발생했습니다. 개발자 도구를 확인해주세요.');
+      setError('Firebase 초기화 중 오류가 발생했습니다.');
     }
   }, []);
 
   useEffect(() => {
-    if (!API_KEY) { 
-      setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수 (REACT_APP_LOSTARK_API_KEY)를 확인해주세요.');
+    if (!LOST_ARK_API_KEY) { 
+      setError('오류: 로스트아크 API 키가 설정되지 않았습니다. 환경 변수를 확인해주세요.');
     }
   }, []);
 
   useEffect(() => {
-    if (!db || !isAuthReady || !userId) {
-      return;
-    }
+    if (!db || !isAuthReady || !userId) return;
     
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const appId = firebaseConfig.appId || 'default-app-id';
     const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
     const q = query(raidsCollectionRef);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedRaids = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
+      const fetchedRaids = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       fetchedRaids.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
-
       setRaids(fetchedRaids);
 
       if (selectedRaid && !fetchedRaids.some(raid => raid.id === selectedRaid)) {
@@ -109,15 +120,12 @@ export default function RaidManager() {
       } else if (!selectedRaid && fetchedRaids.length > 0) {
         setSelectedRaid(fetchedRaids[0].id);
       }
-
     }, (err) => {
       console.error('Firestore: Error fetching raid data:', err);
       setError('공격대 데이터를 불러오는 데 실패했습니다.');
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [db, isAuthReady, userId]);
 
   useEffect(() => {
@@ -125,21 +133,18 @@ export default function RaidManager() {
       if (!db || !isAuthReady || !userId) return;
 
       const now = new Date();
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const appId = firebaseConfig.appId || 'default-app-id';
       const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
       
       try {
         const snapshot = await getDocs(raidsCollectionRef);
         const raidsToDelete = [];
-
         snapshot.forEach(doc => {
           const raid = doc.data();
           if(raid.dateTime) {
             const raidDateTime = new Date(raid.dateTime);
             const twentyFourHoursAfterRaid = new Date(raidDateTime.getTime() + 24 * 60 * 60 * 1000); 
-            if (now >= twentyFourHoursAfterRaid) {
-              raidsToDelete.push(doc.id);
-            }
+            if (now >= twentyFourHoursAfterRaid) raidsToDelete.push(doc.id);
           }
         });
 
@@ -156,13 +161,12 @@ export default function RaidManager() {
 
     const intervalId = setInterval(checkExpiredRaids, 60 * 60 * 1000);
     checkExpiredRaids();
-
     return () => clearInterval(intervalId);
   }, [db, isAuthReady, userId]);
 
   const searchCharacter = async () => {
-    if (!API_KEY) { 
-      setError('오류: API 키가 설정되지 않았습니다. Vercel 환경 변수를 확인해주세요.');
+    if (!LOST_ARK_API_KEY) { 
+      setError('오류: 로스트아크 API 키가 설정되지 않았습니다.');
       return;
     }
     if (!characterName) {
@@ -175,19 +179,15 @@ export default function RaidManager() {
     
     try {
       const requestUrl = `https://developer-lostark.game.onstove.com/characters/${encodeURIComponent(characterName)}/siblings`; 
-      
       const response = await fetch(requestUrl, {
         headers: {
           'accept': 'application/json',
-          'authorization': `bearer ${API_KEY}` 
+          'authorization': `bearer ${LOST_ARK_API_KEY}` 
         }
       });
-
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || `API 오류: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(data.message || `API 오류: ${response.status}`);
       
       if (!data || data.length === 0) {
         setError('해당 캐릭터 또는 연관 캐릭터를 찾을 수 없습니다.');
@@ -197,18 +197,14 @@ export default function RaidManager() {
           ...char,
           parsedIlvl: parseFloat(char.ItemAvgLevel.replace(/,/g, ''))
         }));
-
         const highestIlvlChar = parsedData.reduce((prev, current) => (prev.parsedIlvl > current.parsedIlvl) ? prev : current);
-
         const transformedCharacters = parsedData.map(char => ({
             ...char, 
             displayName: char.CharacterName === highestIlvlChar.CharacterName 
               ? char.CharacterName 
               : `${char.CharacterName} (${highestIlvlChar.CharacterName})` 
         }));
-
         transformedCharacters.sort((a, b) => b.parsedIlvl - a.parsedIlvl); 
-
         setCharacters(transformedCharacters);
         setError(''); 
       }
@@ -227,7 +223,7 @@ export default function RaidManager() {
       return;
     }
     if (!db || !userId) {
-      setError('데이터베이스 연결 또는 사용자 인증이 준비되지 않았습니다.');
+      setError('데이터베이스 연결이 준비되지 않았습니다.');
       return;
     }
 
@@ -249,7 +245,7 @@ export default function RaidManager() {
     };
 
     try {
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const appId = firebaseConfig.appId || 'default-app-id';
       const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
       const docRef = await addDoc(raidsCollectionRef, newRaidData);
       
@@ -258,7 +254,6 @@ export default function RaidManager() {
       setNewRaidTime('');
       setShowCreateModal(false);
       setError(''); 
-
       setSelectedRaid(docRef.id);
       setShowRaidDetails(true); 
 
@@ -274,13 +269,9 @@ export default function RaidManager() {
   };
 
   const deleteRaid = async (raidId) => {
-    if (!db || !userId) {
-      setError('데이터베이스 연결 또는 사용자 인증이 준비되지 않았습니다.');
-      return;
-    }
-
+    if (!db || !userId) return;
     try {
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const appId = firebaseConfig.appId || 'default-app-id';
       await deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidId));
     } catch (e) {
       console.error('Failed to delete raid:', e);
@@ -290,7 +281,7 @@ export default function RaidManager() {
 
   const handleSelectCharacterToAssign = (character) => {
     if (raids.length === 0) {
-      setError('캐릭터를 할당할 공격대가 없습니다. 먼저 공격대를 만들어주세요.');
+      setError('할당할 공격대가 없습니다. 먼저 공격대를 만들어주세요.');
       return;
     }
     setCharacterToAssign(character);
@@ -307,7 +298,7 @@ export default function RaidManager() {
   const assignCharacterToParty = async (partyNum, slot) => {
     if (!characterToAssign || !selectedRaid || !db) return;
 
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const appId = firebaseConfig.appId || 'default-app-id';
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, selectedRaid);
     
     const currentRaidDoc = raids.find(r => r.id === selectedRaid);
@@ -317,13 +308,8 @@ export default function RaidManager() {
     }
 
     const updatedRaid = JSON.parse(JSON.stringify(currentRaidDoc));
-    
-    const getCharMainName = (char) => char.displayName.includes('(')
-        ? char.displayName.split('(')[1].replace(')', '')
-        : char.CharacterName;
-
+    const getCharMainName = (char) => char.displayName.includes('(') ? char.displayName.split('(')[1].replace(')', '') : char.CharacterName;
     const assignedCharMainName = getCharMainName(characterToAssign);
-
     const isFamilyAlreadyInRaid = Object.values(updatedRaid.party1).flat().concat(Object.values(updatedRaid.party2).flat())
       .filter(Boolean)
       .some(member => getCharMainName(member) === assignedCharMainName);
@@ -339,9 +325,7 @@ export default function RaidManager() {
       if (updatedRaid[partyKey].support?.CharacterName === characterToAssign.CharacterName) {
         updatedRaid[partyKey].support = null;
       }
-      updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(
-        d => d.CharacterName !== characterToAssign.CharacterName
-      );
+      updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(d => d.CharacterName !== characterToAssign.CharacterName);
     });
 
     const targetParty = updatedRaid[`party${partyNum}`];
@@ -361,10 +345,7 @@ export default function RaidManager() {
     setError(''); 
 
     try {
-      await updateDoc(raidDocRef, {
-        party1: updatedRaid.party1,
-        party2: updatedRaid.party2
-      });
+      await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
       setCharacterToAssign(null); 
       setShowAssignModal(false); 
     } catch (e) {
@@ -376,7 +357,7 @@ export default function RaidManager() {
   const removeCharacter = async (partyNum, slot, index = null) => {
     if (!selectedRaid || !db) return;
 
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const appId = firebaseConfig.appId || 'default-app-id';
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, selectedRaid);
     
     const currentRaidDoc = raids.find(r => r.id === selectedRaid);
@@ -395,10 +376,7 @@ export default function RaidManager() {
     }
 
     try {
-      await updateDoc(raidDocRef, {
-        party1: updatedRaid.party1,
-        party2: updatedRaid.party2
-      });
+      await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
     } catch (e) {
       console.error('Failed to remove character:', e);
       setError('캐릭터 제거에 실패했습니다.');
@@ -410,10 +388,7 @@ export default function RaidManager() {
   const formatDateTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false 
-    });
+    return date.toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   useEffect(() => {
