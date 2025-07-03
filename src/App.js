@@ -34,6 +34,10 @@ export default function RaidManager() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showRaidDetails, setShowRaidDetails] = useState(false);
 
+  // 삭제 확인 모달 상태 추가
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [raidToDelete, setRaidToDelete] = useState(null);
+
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
@@ -276,14 +280,22 @@ export default function RaidManager() {
     }
   };
 
-  const deleteRaid = async (raidId) => {
-    if (!db || !userId) return;
+  const handleDeleteClick = (raidId) => {
+    setRaidToDelete(raidId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteRaid = async () => {
+    if (!db || !userId || !raidToDelete) return;
     try {
       const appId = firebaseConfig.appId || 'default-app-id';
-      await deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidId));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidToDelete));
     } catch (e) {
       console.error('Failed to delete raid:', e);
       setError('공격대 삭제에 실패했습니다.');
+    } finally {
+      setShowDeleteConfirm(false);
+      setRaidToDelete(null);
     }
   };
 
@@ -538,7 +550,7 @@ export default function RaidManager() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono text-gray-400">{totalMembers}/8</span>
                           <button
-                            onClick={(e) => { e.stopPropagation(); deleteRaid(raid.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(raid.id); }}
                             className="text-red-500 hover:text-red-400 p-1.5 rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors"
                           >
                             <Trash2 size={16} />
@@ -617,6 +629,19 @@ export default function RaidManager() {
                   {isCreating ? '생성 중...' : '만들기'}
                 </button>
                 <button onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
+              <h3 className="text-lg font-semibold mb-2">공격대 삭제</h3>
+              <p className="text-gray-300 mb-6">정말로 이 공격대를 삭제하시겠습니까?<br/>이 작업은 되돌릴 수 없습니다.</p>
+              <div className="flex gap-3">
+                <button onClick={confirmDeleteRaid} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium shadow-md">삭제</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
               </div>
             </div>
           </div>
