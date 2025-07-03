@@ -412,7 +412,7 @@ export default function RaidManager() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 font-sans">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-100">about 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-6 text-center text-gray-100">about 공격대 관리</h1>
         
         {error && (
           <div className="mb-4 p-3 bg-red-900/60 border border-red-600 rounded-md flex items-center max-w-2xl mx-auto text-sm shadow-lg">
