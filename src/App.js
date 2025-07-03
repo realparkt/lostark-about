@@ -412,14 +412,8 @@ export default function RaidManager() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 font-sans">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-100">어바웃 공격대 관리</h1>
+        <h1 className="text-3xl font-bold mb-6 text-center text-gray-100">about 공격대 관리</h1>
         
-        {userId && (
-          <div className="text-center text-gray-400 text-xs mb-4">
-            User ID: <span className="font-mono text-blue-400">{userId}</span>
-          </div>
-        )}
-
         {error && (
           <div className="mb-4 p-3 bg-red-900/60 border border-red-600 rounded-md flex items-center max-w-2xl mx-auto text-sm shadow-lg">
             <AlertCircle className="mr-2 flex-shrink-0" size={16} />
@@ -614,7 +608,7 @@ export default function RaidManager() {
             <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
               <h3 className="text-xl font-semibold mb-5 flex items-center"><Calendar className="mr-2" />새 공격대 만들기</h3>
               <div className="space-y-4">
-                <input type="text" value={newRaidName} onChange={(e) => setNewRaidName(e.target.value)} placeholder="공격대 이름 (예: 발탄 하드)" className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600" />
+                <input type="text" value={newRaidName} onChange={(e) => setNewRaidName(e.target.value)} placeholder="공격대 이름 (예: 1막 하드)" className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600" />
                 <input type="date" value={newRaidDate} onChange={(e) => setNewRaidDate(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
                 <input type="time" value={newRaidTime} onChange={(e) => setNewRaidTime(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
               </div>
