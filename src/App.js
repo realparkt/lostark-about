@@ -665,7 +665,8 @@ export default function RaidManager() {
                     const totalMembers = raid.type === 'general'
                         ? raid.participants?.length || 0
                         : (raid.party1?.dealers.length || 0) + (raid.party1?.support ? 1 : 0) + (raid.party2?.dealers.length || 0) + (raid.party2?.support ? 1 : 0);
-                    const isFull = totalMembers === raid.size;
+                    const maxMembers = raid.size || 8;
+                    const isFull = totalMembers === maxMembers;
                     const indicatorColor = isFull ? 'bg-green-500' : 'bg-yellow-500';
 
                     return (
@@ -692,7 +693,7 @@ export default function RaidManager() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-xs font-mono text-gray-400">{totalMembers}/{raid.size || 8}</span>
+                          <span className="text-xs font-mono text-gray-400">{totalMembers}/{maxMembers}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteClick(raid); }}
                             className="text-gray-400 hover:text-red-400 p-1.5 rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors"
@@ -952,5 +953,4 @@ export default function RaidManager() {
         }
       `}</style>
     </div>
-  );
-}
+  )
