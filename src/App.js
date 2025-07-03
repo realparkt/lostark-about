@@ -954,3 +954,4 @@ export default function RaidManager() {
       `}</style>
     </div>
   )
+}
