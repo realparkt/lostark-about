@@ -27,6 +27,7 @@ export default function RaidManager() {
   const [newRaidName, setNewRaidName] = useState('');
   const [newRaidDate, setNewRaidDate] = useState('');
   const [newRaidTime, setNewRaidTime] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
 
   const [characterToAssign, setCharacterToAssign] = useState(null);
   const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false);
@@ -218,6 +219,8 @@ export default function RaidManager() {
   };
 
   const createRaid = async () => {
+    if (isCreating) return;
+
     if (!newRaidName || !newRaidDate || !newRaidTime) {
       setError('모든 정보를 입력해주세요.');
       return;
@@ -227,11 +230,15 @@ export default function RaidManager() {
       return;
     }
 
+    setIsCreating(true);
+    setError('');
+
     const raidDateTimeStr = `${newRaidDate}T${newRaidTime}:00`;
     const newDate = new Date(raidDateTimeStr);
 
     if (isNaN(newDate.getTime())) { 
         setError('유효하지 않은 날짜 또는 시간 형식입니다.');
+        setIsCreating(false);
         return;
     }
     
@@ -252,8 +259,7 @@ export default function RaidManager() {
       setNewRaidName('');
       setNewRaidDate('');
       setNewRaidTime('');
-      setShowCreateModal(false);
-      setError(''); 
+      setShowCreateModal(false); 
       setSelectedRaid(docRef.id);
       setShowRaidDetails(true); 
 
@@ -265,6 +271,8 @@ export default function RaidManager() {
     } catch (e) {
       console.error('Failed to create raid:', e);
       setError('공격대 생성에 실패했습니다.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -611,7 +619,9 @@ export default function RaidManager() {
                 <input type="time" value={newRaidTime} onChange={(e) => setNewRaidTime(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
               </div>
               <div className="mt-6 flex gap-3">
-                <button onClick={createRaid} className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors font-medium shadow-md">만들기</button>
+                <button onClick={createRaid} disabled={isCreating} className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors font-medium shadow-md disabled:bg-gray-500 disabled:cursor-wait">
+                  {isCreating ? '생성 중...' : '만들기'}
+                </button>
                 <button onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
               </div>
             </div>
