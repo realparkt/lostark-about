@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft, UserPlus, Loader, Pencil, ShieldCheck } from 'lucide-react';
+import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft, UserPlus, Loader, Pencil, ShieldCheck, Gamepad2 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, getDocs } from 'firebase/firestore';
@@ -30,6 +30,9 @@ export default function RaidManager() {
   const [newRaidDate, setNewRaidDate] = useState('');
   const [newRaidTime, setNewRaidTime] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [newRaidType, setNewRaidType] = useState('raid'); // 'raid' or 'general'
+  const [newRaidSize, setNewRaidSize] = useState(8);
+
 
   const [characterToAssign, setCharacterToAssign] = useState(null);
   const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false);
@@ -261,14 +264,22 @@ export default function RaidManager() {
         return;
     }
     
-    const newRaidData = {
+    let newRaidData = {
       name: newRaidName,
       dateTime: newDate.toISOString(), 
-      party1: { dealers: [], support: null },
-      party2: { dealers: [], support: null },
       creatorId: userId,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      type: newRaidType,
     };
+
+    if (newRaidType === 'raid') {
+        newRaidData.party1 = { dealers: [], support: null };
+        newRaidData.party2 = { dealers: [], support: null };
+        newRaidData.size = 8;
+    } else {
+        newRaidData.participants = [];
+        newRaidData.size = Number(newRaidSize) || 4;
+    }
 
     try {
       const appId = firebaseConfig.appId || 'default-app-id';
@@ -391,10 +402,55 @@ export default function RaidManager() {
   };
 
   const handleRaidSelectedForAssignment = (raidId) => {
-    setSelectedRaid(raidId);
-    setShowRaidSelectionModal(false);
-    setShowAssignModal(true);
+    const raid = raids.find(r => r.id === raidId);
+    if (!raid) return;
+
+    if (raid.type === 'general') {
+      assignCharacterToGeneralGame(raidId, characterToAssign);
+      setShowRaidSelectionModal(false);
+    } else {
+      setSelectedRaid(raidId);
+      setShowRaidSelectionModal(false);
+      setShowAssignModal(true);
+    }
     setError(''); 
+  };
+
+  const assignCharacterToGeneralGame = async (raidId, character) => {
+    if (!character || !raidId || !db) return;
+
+    const appId = firebaseConfig.appId || 'default-app-id';
+    const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidId);
+    
+    const currentRaidDoc = raids.find(r => r.id === raidId);
+    if (!currentRaidDoc) {
+      setError('선택된 공격대를 찾을 수 없습니다.');
+      return;
+    }
+    
+    if (currentRaidDoc.participants.length >= currentRaidDoc.size) {
+        setError('자리가 꽉 찼습니다.');
+        return;
+    }
+
+    const getCharMainName = (char) => char.displayName.includes('(') ? char.displayName.split('(')[1].replace(')', '') : char.CharacterName;
+    const assignedCharMainName = getCharMainName(character);
+    const isFamilyAlreadyInRaid = currentRaidDoc.participants.some(member => getCharMainName(member) === assignedCharMainName);
+
+    if (isFamilyAlreadyInRaid) {
+      setError(`'${assignedCharMainName}' 계정의 캐릭터는 이미 이 파티에 할당되어 있습니다.`);
+      return;
+    }
+
+    const updatedParticipants = [...currentRaidDoc.participants, character];
+
+    try {
+      await updateDoc(raidDocRef, { participants: updatedParticipants });
+      setCharacterToAssign(null);
+    } catch (e) {
+      console.error('Failed to assign character to general game:', e);
+      setError('캐릭터 할당에 실패했습니다.');
+    }
   };
 
   const assignCharacterToParty = async (partyNum, slot) => {
@@ -469,19 +525,18 @@ export default function RaidManager() {
     }
     
     const updatedRaid = JSON.parse(JSON.stringify(currentRaidDoc));
-    const targetParty = updatedRaid[`party${partyNum}`];
-
-    if (slot === 'support') {
-      targetParty.support = null;
-    } else if (index !== null) {
-      targetParty.dealers.splice(index, 1);
-    }
-
-    try {
-      await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
-    } catch (e) {
-      console.error('Failed to remove character:', e);
-      setError('캐릭터 제거에 실패했습니다.');
+    
+    if (currentRaidDoc.type === 'general') {
+        updatedRaid.participants.splice(index, 1);
+        await updateDoc(raidDocRef, { participants: updatedRaid.participants });
+    } else {
+        const targetParty = updatedRaid[`party${partyNum}`];
+        if (slot === 'support') {
+          targetParty.support = null;
+        } else if (index !== null) {
+          targetParty.dealers.splice(index, 1);
+        }
+        await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
     }
   };
 
@@ -607,10 +662,10 @@ export default function RaidManager() {
                     </div>
                   )}
                   {raids.map(raid => {
-                    const totalMembers = 
-                      raid.party1.dealers.length + (raid.party1.support ? 1 : 0) +
-                      raid.party2.dealers.length + (raid.party2.support ? 1 : 0);
-                    const isFull = totalMembers === 8;
+                    const totalMembers = raid.type === 'general'
+                        ? raid.participants?.length || 0
+                        : (raid.party1?.dealers.length || 0) + (raid.party1?.support ? 1 : 0) + (raid.party2?.dealers.length || 0) + (raid.party2?.support ? 1 : 0);
+                    const isFull = totalMembers === raid.size;
                     const indicatorColor = isFull ? 'bg-green-500' : 'bg-yellow-500';
 
                     return (
@@ -626,7 +681,10 @@ export default function RaidManager() {
                         <div className="flex items-center overflow-hidden mr-2">
                           <div className={`w-2.5 h-2.5 rounded-full mr-3 flex-shrink-0 ${indicatorColor}`}></div>
                           <div className="truncate">
-                            <div className="font-semibold truncate">{raid.name}</div>
+                            <div className="font-semibold truncate flex items-center">
+                              {raid.type === 'general' && <Gamepad2 size={16} className="mr-1.5 text-cyan-400"/>}
+                              {raid.name}
+                            </div>
                             <div className="text-sm text-gray-300 flex items-center">
                               <Clock className="mr-1.5" size={14} />
                               {formatDateTime(raid.dateTime)}
@@ -634,7 +692,7 @@ export default function RaidManager() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-xs font-mono text-gray-400">{totalMembers}/8</span>
+                          <span className="text-xs font-mono text-gray-400">{totalMembers}/{raid.size || 8}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteClick(raid); }}
                             className="text-gray-400 hover:text-red-400 p-1.5 rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors"
@@ -669,52 +727,80 @@ export default function RaidManager() {
                       <div className="text-sm text-gray-400 mb-4">
                         출발: {formatDateTime(currentRaid.dateTime)}
                       </div>
-                      <div className="space-y-4">
-                        {[1, 2].map(partyNum => (
-                          <div key={partyNum} className="bg-gray-800/70 p-3 rounded-md shadow-inner">
-                            <h3 className="font-semibold mb-2 text-indigo-300">{partyNum}파티</h3>
-                            <div className="space-y-2">
-                              <div className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
-                                {currentRaid[`party${partyNum}`].support ? (
+                      {currentRaid.type === 'general' ? (
+                        <div className="space-y-2">
+                          {Array.from({ length: currentRaid.size }).map((_, index) => {
+                            const member = currentRaid.participants?.[index];
+                            return (
+                              <div key={index} className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
+                                {member ? (
                                   <>
                                     <div className="w-full">
-                                      <div className="text-sm font-semibold text-green-300 flex items-center justify-center">
-                                        <span>{currentRaid[`party${partyNum}`].support.displayName}</span>
-                                        {currentRaid[`party${partyNum}`].support.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+                                      <div className="text-sm font-semibold text-sky-300 flex items-center justify-center">
+                                        <span>{member.displayName}</span>
+                                        {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
                                       </div>
-                                      <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
+                                      <div className="text-xs text-gray-400">{member.CharacterClassName} | IL {member.ItemAvgLevel}</div>
                                     </div>
-                                    <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                    <button onClick={() => removeCharacter(null, 'general', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
                                       <Trash2 size={12} />
                                     </button>
                                   </>
-                                ) : ( <div className="w-full text-xs text-gray-500">서포터 슬롯</div> )}
+                                ) : (
+                                  <div className="w-full text-xs text-gray-500">참여자 슬롯</div>
+                                )}
                               </div>
-                              {[0, 1, 2].map(index => {
-                                const dealer = currentRaid[`party${partyNum}`].dealers[index];
-                                return (
-                                  <div key={index} className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
-                                    {dealer ? (
-                                      <>
-                                        <div className="w-full">
-                                          <div className="text-sm font-semibold text-red-300 flex items-center justify-center">
-                                            <span>{dealer.displayName}</span>
-                                            {dealer.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
-                                          </div>
-                                          <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {[1, 2].map(partyNum => (
+                            <div key={partyNum} className="bg-gray-800/70 p-3 rounded-md shadow-inner">
+                              <h3 className="font-semibold mb-2 text-indigo-300">{partyNum}파티</h3>
+                              <div className="space-y-2">
+                                <div className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
+                                  {currentRaid[`party${partyNum}`].support ? (
+                                    <>
+                                      <div className="w-full">
+                                        <div className="text-sm font-semibold text-green-300 flex items-center justify-center">
+                                          <span>{currentRaid[`party${partyNum}`].support.displayName}</span>
+                                          {currentRaid[`party${partyNum}`].support.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
                                         </div>
-                                        <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
-                                          <Trash2 size={12} />
-                                        </button>
-                                      </>
-                                    ) : ( <div className="w-full text-xs text-gray-500">딜러 슬롯</div> )}
-                                  </div>
-                                );
-                              })}
+                                        <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
+                                      </div>
+                                      <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </>
+                                  ) : ( <div className="w-full text-xs text-gray-500">서포터 슬롯</div> )}
+                                </div>
+                                {[0, 1, 2].map(index => {
+                                  const dealer = currentRaid[`party${partyNum}`].dealers[index];
+                                  return (
+                                    <div key={index} className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
+                                      {dealer ? (
+                                        <>
+                                          <div className="w-full">
+                                            <div className="text-sm font-semibold text-red-300 flex items-center justify-center">
+                                              <span>{dealer.displayName}</span>
+                                              {dealer.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+                                            </div>
+                                            <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
+                                          </div>
+                                          <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                            <Trash2 size={12} />
+                                          </button>
+                                        </>
+                                      ) : ( <div className="w-full text-xs text-gray-500">딜러 슬롯</div> )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -728,7 +814,17 @@ export default function RaidManager() {
             <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
               <h3 className="text-xl font-semibold mb-5 flex items-center"><Calendar className="mr-2" />새 공격대 만들기</h3>
               <div className="space-y-4">
+                <div className="flex bg-gray-700 rounded-lg p-1">
+                  <button onClick={() => setNewRaidType('raid')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${newRaidType === 'raid' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}>레이드 (8인)</button>
+                  <button onClick={() => setNewRaidType('general')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${newRaidType === 'general' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}>종합게임</button>
+                </div>
                 <input type="text" value={newRaidName} onChange={(e) => setNewRaidName(e.target.value)} placeholder="공격대 이름 (예: 1막 하드)" className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600" />
+                {newRaidType === 'general' && (
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="raidSize" className="text-sm font-medium text-gray-300">인원수:</label>
+                    <input type="number" id="raidSize" value={newRaidSize} onChange={(e) => setNewRaidSize(e.target.value)} min="1" max="20" className="w-20 px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600" />
+                  </div>
+                )}
                 <input type="date" value={newRaidDate} onChange={(e) => setNewRaidDate(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
                 <input type="time" value={newRaidTime} onChange={(e) => setNewRaidTime(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
               </div>
@@ -856,5 +952,5 @@ export default function RaidManager() {
         }
       `}</style>
     </div>
-  )
+  );
 }
