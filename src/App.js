@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft, UserPlus, Loader } from 'lucide-react';
+import { Clock, Users, Search, AlertCircle, Trash2, Plus, Calendar, ArrowLeft, UserPlus, Loader, Pencil, ShieldCheck } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, getDocs } from 'firebase/firestore';
@@ -15,6 +15,8 @@ const firebaseConfig = {
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
+
+const ADMIN_PASSWORD = '221215';
 
 export default function RaidManager() {
   const [characterName, setCharacterName] = useState('');
@@ -34,9 +36,18 @@ export default function RaidManager() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showRaidDetails, setShowRaidDetails] = useState(false);
 
-  // 삭제 확인 모달 상태 추가
+  // 삭제 및 수정 모달 상태 추가
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [raidToDelete, setRaidToDelete] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [raidToEdit, setRaidToEdit] = useState(null);
+  const [editedRaidName, setEditedRaidName] = useState('');
+  const [editedRaidDate, setEditedRaidDate] = useState('');
+  const [editedRaidTime, setEditedRaidTime] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+
 
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -203,11 +214,15 @@ export default function RaidManager() {
           parsedIlvl: parseFloat(char.ItemAvgLevel.replace(/,/g, ''))
         }));
         const highestIlvlChar = parsedData.reduce((prev, current) => (prev.parsedIlvl > current.parsedIlvl) ? prev : current);
+        
+        const isSpecialAccount = highestIlvlChar.CharacterName === '호크준듀';
+
         const transformedCharacters = parsedData.map(char => ({
             ...char, 
             displayName: char.CharacterName === highestIlvlChar.CharacterName 
               ? char.CharacterName 
-              : `${char.CharacterName} (${highestIlvlChar.CharacterName})` 
+              : `${char.CharacterName} (${highestIlvlChar.CharacterName})`,
+            isSpecial: isSpecialAccount,
         }));
         transformedCharacters.sort((a, b) => b.parsedIlvl - a.parsedIlvl); 
         setCharacters(transformedCharacters);
@@ -280,22 +295,89 @@ export default function RaidManager() {
     }
   };
 
-  const handleDeleteClick = (raidId) => {
-    setRaidToDelete(raidId);
-    setShowDeleteConfirm(true);
+  const handleDeleteClick = (raid) => {
+    if (!raid) return;
+    setRaidToDelete(raid);
+    if (userId === raid.creatorId) {
+      setShowDeleteConfirm(true);
+    } else {
+      setShowAdminPasswordModal(true);
+    }
   };
 
   const confirmDeleteRaid = async () => {
-    if (!db || !userId || !raidToDelete) return;
+    if (!db || !raidToDelete) return;
     try {
       const appId = firebaseConfig.appId || 'default-app-id';
-      await deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidToDelete));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidToDelete.id));
     } catch (e) {
       console.error('Failed to delete raid:', e);
       setError('공격대 삭제에 실패했습니다.');
     } finally {
       setShowDeleteConfirm(false);
+      setShowAdminPasswordModal(false);
       setRaidToDelete(null);
+      setAdminPasswordInput('');
+    }
+  };
+
+  const handleAdminDelete = () => {
+    if (adminPasswordInput === ADMIN_PASSWORD) {
+      confirmDeleteRaid();
+    } else {
+      setError('관리자 비밀번호가 올바르지 않습니다.');
+      setAdminPasswordInput('');
+    }
+  };
+  
+  const handleEditClick = (raid) => {
+    if (!raid) return;
+    setRaidToEdit(raid);
+    setEditedRaidName(raid.name);
+    const raidDate = new Date(raid.dateTime);
+    const offset = raidDate.getTimezoneOffset() * 60000;
+    const localDate = new Date(raidDate.getTime() - offset);
+    const [date, time] = localDate.toISOString().split('T');
+    setEditedRaidDate(date);
+    setEditedRaidTime(time.substring(0, 5));
+    setShowEditModal(true);
+  };
+
+  const handleUpdateRaid = async () => {
+    if (!raidToEdit || isUpdating) return;
+
+    if (!editedRaidName || !editedRaidDate || !editedRaidTime) {
+      setError('모든 정보를 입력해주세요.');
+      return;
+    }
+
+    setIsUpdating(true);
+    setError('');
+
+    const raidDateTimeStr = `${editedRaidDate}T${editedRaidTime}:00`;
+    const newDate = new Date(raidDateTimeStr);
+
+    if (isNaN(newDate.getTime())) {
+      setError('유효하지 않은 날짜 또는 시간 형식입니다.');
+      setIsUpdating(false);
+      return;
+    }
+
+    const appId = firebaseConfig.appId || 'default-app-id';
+    const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidToEdit.id);
+
+    try {
+      await updateDoc(raidDocRef, {
+        name: editedRaidName,
+        dateTime: newDate.toISOString(),
+      });
+      setShowEditModal(false);
+      setRaidToEdit(null);
+    } catch (e) {
+      console.error('Failed to update raid:', e);
+      setError('공격대 정보 업데이트에 실패했습니다.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -414,8 +496,9 @@ export default function RaidManager() {
   useEffect(() => {
     if (showCreateModal) {
       const today = new Date();
-      today.setHours(today.getHours() + 9);
-      const [date, time] = today.toISOString().split('T');
+      const offset = today.getTimezoneOffset() * 60000;
+      const localDate = new Date(today.getTime() - offset);
+      const [date, time] = localDate.toISOString().split('T');
       setNewRaidDate(date);
       setNewRaidTime(time.substring(0, 5));
     }
@@ -478,7 +561,10 @@ export default function RaidManager() {
                     className="p-3 bg-gray-700/80 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-between shadow-sm border border-gray-700"
                   >
                     <div>
-                      <div className="font-semibold">{char.displayName}</div> 
+                      <div className="font-semibold flex items-center">
+                        {char.displayName}
+                        {char.isSpecial && <span className="ml-2" title="자칭 귀염둥이">🎀</span>}
+                      </div> 
                       <div className="text-sm text-gray-300">
                         Lv.{char.CharacterLevel} {char.CharacterClassName}
                       </div>
@@ -537,21 +623,21 @@ export default function RaidManager() {
                             : 'bg-gray-700/80 border-gray-700 hover:border-gray-600'
                         }`}
                       >
-                        <div className="flex items-center">
+                        <div className="flex items-center overflow-hidden mr-2">
                           <div className={`w-2.5 h-2.5 rounded-full mr-3 flex-shrink-0 ${indicatorColor}`}></div>
-                          <div>
-                            <div className="font-semibold">{raid.name}</div>
+                          <div className="truncate">
+                            <div className="font-semibold truncate">{raid.name}</div>
                             <div className="text-sm text-gray-300 flex items-center">
                               <Clock className="mr-1.5" size={14} />
                               {formatDateTime(raid.dateTime)}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs font-mono text-gray-400">{totalMembers}/8</span>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(raid.id); }}
-                            className="text-red-500 hover:text-red-400 p-1.5 rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(raid); }}
+                            className="text-gray-400 hover:text-red-400 p-1.5 rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -568,46 +654,62 @@ export default function RaidManager() {
                     </div>
                   )}
                   {currentRaid && (
-                    <div className="space-y-4">
-                      {[1, 2].map(partyNum => (
-                        <div key={partyNum} className="bg-gray-800/70 p-3 rounded-md shadow-inner">
-                          <h3 className="font-semibold mb-2 text-indigo-300">{partyNum}파티</h3>
-                          <div className="space-y-2">
-                            <div className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
-                              {currentRaid[`party${partyNum}`].support ? (
-                                <>
-                                  <div className="w-full">
-                                    <div className="text-sm font-semibold text-green-300">{currentRaid[`party${partyNum}`].support.displayName}</div>
-                                    <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
+                    <>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-lg text-gray-200 truncate pr-2">{currentRaid.name}</h3>
+                        {userId === currentRaid.creatorId && (
+                          <button
+                            onClick={() => handleEditClick(currentRaid)}
+                            className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400 mb-4">
+                        출발: {formatDateTime(currentRaid.dateTime)}
+                      </div>
+                      <div className="space-y-4">
+                        {[1, 2].map(partyNum => (
+                          <div key={partyNum} className="bg-gray-800/70 p-3 rounded-md shadow-inner">
+                            <h3 className="font-semibold mb-2 text-indigo-300">{partyNum}파티</h3>
+                            <div className="space-y-2">
+                              <div className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
+                                {currentRaid[`party${partyNum}`].support ? (
+                                  <>
+                                    <div className="w-full">
+                                      <div className="text-sm font-semibold text-green-300">{currentRaid[`party${partyNum}`].support.displayName}</div>
+                                      <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
+                                    </div>
+                                    <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </>
+                                ) : ( <div className="w-full text-xs text-gray-500">서포터 슬롯</div> )}
+                              </div>
+                              {[0, 1, 2].map(index => {
+                                const dealer = currentRaid[`party${partyNum}`].dealers[index];
+                                return (
+                                  <div key={index} className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
+                                    {dealer ? (
+                                      <>
+                                        <div className="w-full">
+                                          <div className="text-sm font-semibold text-red-300">{dealer.displayName}</div>
+                                          <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
+                                        </div>
+                                        <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </>
+                                    ) : ( <div className="w-full text-xs text-gray-500">딜러 슬롯</div> )}
                                   </div>
-                                  <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
-                                    <Trash2 size={12} />
-                                  </button>
-                                </>
-                              ) : ( <div className="w-full text-xs text-gray-500">서포터 슬롯</div> )}
+                                );
+                              })}
                             </div>
-                            {[0, 1, 2].map(index => {
-                              const dealer = currentRaid[`party${partyNum}`].dealers[index];
-                              return (
-                                <div key={index} className="p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center">
-                                  {dealer ? (
-                                    <>
-                                      <div className="w-full">
-                                        <div className="text-sm font-semibold text-red-300">{dealer.displayName}</div>
-                                        <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
-                                      </div>
-                                      <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
-                                        <Trash2 size={12} />
-                                      </button>
-                                    </>
-                                  ) : ( <div className="w-full text-xs text-gray-500">딜러 슬롯</div> )}
-                                </div>
-                              );
-                            })}
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -634,6 +736,25 @@ export default function RaidManager() {
           </div>
         )}
 
+        {showEditModal && raidToEdit && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
+              <h3 className="text-xl font-semibold mb-5 flex items-center"><Pencil className="mr-2" />공격대 정보 수정</h3>
+              <div className="space-y-4">
+                <input type="text" value={editedRaidName} onChange={(e) => setEditedRaidName(e.target.value)} placeholder="공격대 이름" className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600" />
+                <input type="date" value={editedRaidDate} onChange={(e) => setEditedRaidDate(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
+                <input type="time" value={editedRaidTime} onChange={(e) => setEditedRaidTime(e.target.value)} className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-300 border border-gray-600" />
+              </div>
+              <div className="mt-6 flex gap-3">
+                <button onClick={handleUpdateRaid} disabled={isUpdating} className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors font-medium shadow-md disabled:bg-gray-500 disabled:cursor-wait">
+                  {isUpdating ? '저장 중...' : '저장'}
+                </button>
+                <button onClick={() => setShowEditModal(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
             <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
@@ -642,6 +763,27 @@ export default function RaidManager() {
               <div className="flex gap-3">
                 <button onClick={confirmDeleteRaid} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium shadow-md">삭제</button>
                 <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showAdminPasswordModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
+              <h3 className="text-lg font-semibold mb-4 flex items-center"><ShieldCheck className="mr-2"/>관리자 확인</h3>
+              <p className="text-gray-300 mb-4">삭제하려면 관리자 비밀번호를 입력하세요.</p>
+              <input 
+                type="password"
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAdminDelete()}
+                className="w-full px-3 py-2 bg-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400 border border-gray-600"
+                placeholder="비밀번호 입력"
+              />
+              <div className="mt-6 flex gap-3">
+                <button onClick={handleAdminDelete} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium shadow-md">확인</button>
+                <button onClick={() => { setShowAdminPasswordModal(false); setAdminPasswordInput(''); setError(''); }} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
               </div>
             </div>
           </div>
