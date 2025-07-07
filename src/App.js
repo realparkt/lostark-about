@@ -162,7 +162,7 @@ export default function RaidManager() {
           const raid = doc.data();
           if(raid.dateTime) {
             const raidDateTime = new Date(raid.dateTime);
-            const twentyFourHoursAfterRaid = new Date(raidDateTime.getTime() + 24 * 60 * 60 * 1000); 
+            const twentyFourHoursAfterRaid = new Date(raidDateTime.getTime() + 2 * 60 * 60 * 1000); 
             if (now >= twentyFourHoursAfterRaid) raidsToDelete.push(doc.id);
           }
         });
@@ -953,5 +953,5 @@ export default function RaidManager() {
         }
       `}</style>
     </div>
-  )
+  );
 }
