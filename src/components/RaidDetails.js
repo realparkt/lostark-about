@@ -2,15 +2,19 @@ import React from 'react';
 import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
 const PartySlot = ({ member, onRemove, role, label }) => {
-  // 아이템 레벨을 정수형으로 변환
   const itemLevel = member ? Math.floor(parseFloat(String(member.ItemAvgLevel).replace(/,/g, ''))) : 0;
+  const colorClass = {
+    support: 'text-pink-400',
+    dealer: 'text-green-300',
+    general: 'text-sky-300'
+  };
 
   return (
     <div className={`p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center`}>
       {member ? (
         <>
           <div className="w-full">
-            <div className={`text-sm font-semibold flex items-center justify-center ${role === 'support' ? 'text-pink-400' : role === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
+            <div className={`text-sm font-semibold flex items-center justify-center ${colorClass[role]}`}>
               <span>{member.displayName}</span>
               {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
             </div>
