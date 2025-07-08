@@ -10,7 +10,7 @@ const PartySlot = ({ member, onRemove, type }) => (
             <span>{member.displayName}</span>
             {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
           </div>
-          <div className="text-xs text-gray-400">{member.CharacterClassName} | IL {member.ItemAvgLevel}</div>
+          <div className="text-xs text-gray-400">{member.CharacterClassName} | IL {member.ItemAvgLevel} {member.CombatPower && `/ 전투력 ${member.CombatPower}`}</div>
         </div>
         <button onClick={onRemove} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50"><Trash2 size={12} /></button>
       </>
