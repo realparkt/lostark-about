@@ -42,6 +42,8 @@ export default function RaidManager() {
   // 삭제 및 수정 모달 상태 추가
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [raidToDelete, setRaidToDelete] = useState(null);
+  const [characterToRemove, setCharacterToRemove] = useState(null);
+  const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [raidToEdit, setRaidToEdit] = useState(null);
   const [editedRaidName, setEditedRaidName] = useState('');
@@ -162,8 +164,8 @@ export default function RaidManager() {
           const raid = doc.data();
           if(raid.dateTime) {
             const raidDateTime = new Date(raid.dateTime);
-            const twentyFourHoursAfterRaid = new Date(raidDateTime.getTime() + 2 * 60 * 60 * 1000); 
-            if (now >= twentyFourHoursAfterRaid) raidsToDelete.push(doc.id);
+            const twoHoursAfterRaid = new Date(raidDateTime.getTime() + 2 * 60 * 60 * 1000); 
+            if (now >= twoHoursAfterRaid) raidsToDelete.push(doc.id);
           }
         });
 
@@ -334,7 +336,11 @@ export default function RaidManager() {
 
   const handleAdminDelete = () => {
     if (adminPasswordInput === ADMIN_PASSWORD) {
-      confirmDeleteRaid();
+      if (raidToDelete) {
+        confirmDeleteRaid();
+      } else if (characterToRemove) {
+        confirmRemoveCharacter();
+      }
     } else {
       setError('관리자 비밀번호가 올바르지 않습니다.');
       setAdminPasswordInput('');
@@ -405,8 +411,10 @@ export default function RaidManager() {
     const raid = raids.find(r => r.id === raidId);
     if (!raid) return;
 
+    const characterWithAddedBy = { ...characterToAssign, addedBy: userId };
+
     if (raid.type === 'general') {
-      assignCharacterToGeneralGame(raidId, characterToAssign);
+      assignCharacterToGeneralGame(raidId, characterWithAddedBy);
       setShowRaidSelectionModal(false);
     } else {
       setSelectedRaid(raidId);
@@ -467,7 +475,9 @@ export default function RaidManager() {
 
     const updatedRaid = JSON.parse(JSON.stringify(currentRaidDoc));
     const getCharMainName = (char) => char.displayName.includes('(') ? char.displayName.split('(')[1].replace(')', '') : char.CharacterName;
-    const assignedCharMainName = getCharMainName(characterToAssign);
+    const characterWithAddedBy = { ...characterToAssign, addedBy: userId };
+    const assignedCharMainName = getCharMainName(characterWithAddedBy);
+
     const isFamilyAlreadyInRaid = Object.values(updatedRaid.party1).flat().concat(Object.values(updatedRaid.party2).flat())
       .filter(Boolean)
       .some(member => getCharMainName(member) === assignedCharMainName);
@@ -480,10 +490,10 @@ export default function RaidManager() {
     }
       
     ['party1', 'party2'].forEach(partyKey => {
-      if (updatedRaid[partyKey].support?.CharacterName === characterToAssign.CharacterName) {
+      if (updatedRaid[partyKey].support?.CharacterName === characterWithAddedBy.CharacterName) {
         updatedRaid[partyKey].support = null;
       }
-      updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(d => d.CharacterName !== characterToAssign.CharacterName);
+      updatedRaid[partyKey].dealers = updatedRaid[partyKey].dealers.filter(d => d.CharacterName !== characterWithAddedBy.CharacterName);
     });
 
     const targetParty = updatedRaid[`party${partyNum}`];
@@ -492,13 +502,13 @@ export default function RaidManager() {
         setError('서포터 슬롯이 이미 채워져 있습니다.');
         return;
       }
-      targetParty.support = characterToAssign;
+      targetParty.support = characterWithAddedBy;
     } else {
       if (targetParty.dealers.length >= 3) {
         setError('딜러 슬롯이 꽉 찼습니다.');
         return;
       }
-      targetParty.dealers.push(characterToAssign);
+      targetParty.dealers.push(characterWithAddedBy);
     }
     setError(''); 
 
@@ -512,9 +522,36 @@ export default function RaidManager() {
     }
   };
 
-  const removeCharacter = async (partyNum, slot, index = null) => {
-    if (!selectedRaid || !db) return;
+  const handleRemoveClick = (partyNum, slot, index) => {
+    if (!currentRaid) return;
+    let characterData;
 
+    if (currentRaid.type === 'general') {
+      characterData = currentRaid.participants[index];
+    } else {
+      if (slot === 'support') {
+        characterData = currentRaid[`party${partyNum}`].support;
+      } else {
+        characterData = currentRaid[`party${partyNum}`].dealers[index];
+      }
+    }
+    
+    if (!characterData) return;
+
+    setRaidToDelete(null); // 다른 삭제 액션 초기화
+    setCharacterToRemove({ partyNum, slot, index, addedBy: characterData.addedBy });
+
+    if (userId === characterData.addedBy) {
+      setShowDeleteConfirm(true);
+    } else {
+      setShowCannotDeleteModal(true);
+    }
+  };
+
+  const confirmRemoveCharacter = async () => {
+    if (!selectedRaid || !db || !characterToRemove) return;
+
+    const { partyNum, slot, index } = characterToRemove;
     const appId = firebaseConfig.appId || 'default-app-id';
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, selectedRaid);
     
@@ -526,17 +563,26 @@ export default function RaidManager() {
     
     const updatedRaid = JSON.parse(JSON.stringify(currentRaidDoc));
     
-    if (currentRaidDoc.type === 'general') {
-        updatedRaid.participants.splice(index, 1);
-        await updateDoc(raidDocRef, { participants: updatedRaid.participants });
-    } else {
-        const targetParty = updatedRaid[`party${partyNum}`];
-        if (slot === 'support') {
-          targetParty.support = null;
-        } else if (index !== null) {
-          targetParty.dealers.splice(index, 1);
-        }
-        await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
+    try {
+      if (currentRaidDoc.type === 'general') {
+          updatedRaid.participants.splice(index, 1);
+          await updateDoc(raidDocRef, { participants: updatedRaid.participants });
+      } else {
+          const targetParty = updatedRaid[`party${partyNum}`];
+          if (slot === 'support') {
+            targetParty.support = null;
+          } else if (index !== null) {
+            targetParty.dealers.splice(index, 1);
+          }
+          await updateDoc(raidDocRef, { party1: updatedRaid.party1, party2: updatedRaid.party2 });
+      }
+    } catch(e) {
+      console.error('Failed to remove character:', e);
+      setError('캐릭터 제외에 실패했습니다.');
+    } finally {
+      setShowDeleteConfirm(false);
+      setShowAdminPasswordModal(false);
+      setCharacterToRemove(null);
     }
   };
 
@@ -743,7 +789,7 @@ export default function RaidManager() {
                                       </div>
                                       <div className="text-xs text-gray-400">{member.CharacterClassName} | IL {member.ItemAvgLevel}</div>
                                     </div>
-                                    <button onClick={() => removeCharacter(null, 'general', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                    <button onClick={() => handleRemoveClick(null, 'general', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
                                       <Trash2 size={12} />
                                     </button>
                                   </>
@@ -770,7 +816,7 @@ export default function RaidManager() {
                                         </div>
                                         <div className="text-xs text-gray-400">{currentRaid[`party${partyNum}`].support.CharacterClassName} | IL {currentRaid[`party${partyNum}`].support.ItemAvgLevel}</div>
                                       </div>
-                                      <button onClick={() => removeCharacter(partyNum, 'support')} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                      <button onClick={() => handleRemoveClick(partyNum, 'support', null)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
                                         <Trash2 size={12} />
                                       </button>
                                     </>
@@ -789,7 +835,7 @@ export default function RaidManager() {
                                             </div>
                                             <div className="text-xs text-gray-400">{dealer.CharacterClassName} | IL {dealer.ItemAvgLevel}</div>
                                           </div>
-                                          <button onClick={() => removeCharacter(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
+                                          <button onClick={() => handleRemoveClick(partyNum, 'dealer', index)} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50">
                                             <Trash2 size={12} />
                                           </button>
                                         </>
@@ -861,11 +907,29 @@ export default function RaidManager() {
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
             <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
-              <h3 className="text-lg font-semibold mb-2">공격대 삭제</h3>
-              <p className="text-gray-300 mb-6">정말로 이 공격대를 삭제하시겠습니까?<br/>이 작업은 되돌릴 수 없습니다.</p>
+              <h3 className="text-lg font-semibold mb-2">{raidToDelete ? '공격대 삭제' : '캐릭터 제외'}</h3>
+              <p className="text-gray-300 mb-6">
+                {raidToDelete ? '정말로 이 공격대를 삭제하시겠습니까?' : '정말로 이 캐릭터를 제외하시겠습니까?'}
+                <br/>이 작업은 되돌릴 수 없습니다.
+              </p>
               <div className="flex gap-3">
-                <button onClick={confirmDeleteRaid} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium shadow-md">삭제</button>
+                <button onClick={raidToDelete ? confirmDeleteRaid : confirmRemoveCharacter} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors font-medium shadow-md">
+                  {raidToDelete ? '삭제' : '제외'}
+                </button>
                 <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">취소</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCannotDeleteModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
+              <h3 className="text-lg font-semibold mb-2">삭제 권한 없음</h3>
+              <p className="text-gray-300 mb-6">본인이 추가한 캐릭터만 제외할 수 있습니다.</p>
+              <div className="flex flex-col gap-3">
+                <button onClick={() => { setShowCannotDeleteModal(false); setShowAdminPasswordModal(true); }} className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-md transition-colors font-medium shadow-md">관리자 권한으로 삭제</button>
+                <button onClick={() => setShowCannotDeleteModal(false)} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md transition-colors font-medium shadow-md">확인</button>
               </div>
             </div>
           </div>
