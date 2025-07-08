@@ -1,5 +1,40 @@
 import React from 'react';
-import { Clock, Trash2, Gamepad2 } from 'lucide-react';
+import { Clock, Trash2, Gamepad2, Swords } from 'lucide-react';
+
+const calculateAverageCombatPower = (raid) => {
+  if (!raid) return 'N/A';
+
+  let members = [];
+  if (raid.type === 'general') {
+    members = raid.participants || [];
+  } else {
+    members = [
+      ...(raid.party1?.dealers || []),
+      raid.party1?.support,
+      ...(raid.party2?.dealers || []),
+      raid.party2?.support,
+    ].filter(Boolean);
+  }
+
+  const validMembers = members.filter(m => m && m.CombatPower && m.CombatPower !== 'N/A');
+
+  if (validMembers.length === 0) {
+    return 'N/A';
+  }
+
+  const totalPower = validMembers.reduce((sum, member) => {
+    const power = parseFloat(String(member.CombatPower).replace(/,/g, ''));
+    return sum + (isNaN(power) ? 0 : power);
+  }, 0);
+
+  const averagePower = totalPower / validMembers.length;
+
+  return averagePower.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+};
+
 
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
@@ -16,6 +51,7 @@ export default function RaidList({ raids, selectedRaidId, onSelectRaid, onDelete
         const maxMembers = raid.size || 8;
         const isFull = totalMembers === maxMembers;
         const indicatorColor = isFull ? 'bg-green-500' : 'bg-yellow-500';
+        const avgCombatPower = calculateAverageCombatPower(raid);
 
         return (
           <div key={raid.id} onClick={() => onSelectRaid(raid.id)} className={`p-3 rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-between shadow-md border-2 ${selectedRaidId === raid.id ? 'bg-blue-900/50 border-blue-500' : 'bg-gray-700/80 border-gray-700 hover:border-gray-600'}`}>
@@ -27,6 +63,10 @@ export default function RaidList({ raids, selectedRaidId, onSelectRaid, onDelete
                   {raid.name}
                 </div>
                 <div className="text-sm text-gray-300 flex items-center"><Clock className="mr-1.5" size={14} />{formatDateTime(raid.dateTime)}</div>
+                <div className="text-xs text-amber-400 flex items-center mt-1">
+                  <Swords size={12} className="mr-1.5" />
+                  평균 전투력: {avgCombatPower}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
