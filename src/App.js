@@ -40,17 +40,14 @@ export default function App() {
   const [characterToAssign, setCharacterToAssign] = useState(null);
   const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const raidListRef = useRef(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        try { await signInAnonymously(auth); } 
-        catch (err) { setError('Firebase 인증에 실패했습니다.'); }
-      }
+      if (user) setUserId(user.uid);
+      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -200,7 +197,7 @@ export default function App() {
   
   const assignCharacter = async (raidId, partyNum, slot) => {
     if (!characterToAssign || !db) return;
-    const characterWithDetails = await fetchCharacterDetails(characterToAssign);
+    const characterWithDetails = await fetchCharacterDetails(characterToAssign, userId);
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidId);
     const currentRaidDoc = raids.find(r => r.id === raidId);
     if (!currentRaidDoc) return;
@@ -235,14 +232,40 @@ export default function App() {
     setShowAssignModal(false);
   };
 
-  const fetchCharacterDetails = async (character) => {
+  const fetchCharacterDetails = async (character, addedById) => {
     try {
       const armoryUrl = `https://developer-lostark.game.onstove.com/armories/characters/${encodeURIComponent(character.CharacterName)}?filters=profiles`;
       const response = await fetch(armoryUrl, { headers: { 'accept': 'application/json', 'authorization': `bearer ${LOST_ARK_API_KEY}` } });
       const data = await response.json();
-      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: userId };
-      return { ...character, CombatPower: 'N/A', addedBy: userId };
-    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: userId }; }
+      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: addedById };
+      return { ...character, CombatPower: 'N/A', addedBy: addedById };
+    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: addedById }; }
+  };
+
+  const handleSyncCombatPower = async (raidToSync) => {
+    if (!raidToSync || isSyncing) return;
+    setIsSyncing(true); setError('');
+    let members = [];
+    if (raidToSync.type === 'general') members = raidToSync.participants || [];
+    else members = [...(raidToSync.party1?.dealers || []), raidToSync.party1?.support, ...(raidToSync.party2?.dealers || []), raidToSync.party2?.support].filter(Boolean);
+    const membersToUpdate = members.filter(m => m && !m.CombatPower);
+    if (membersToUpdate.length === 0) { setIsSyncing(false); return; }
+    try {
+      const updatedMembersPromises = membersToUpdate.map(member => fetchCharacterDetails(member, member.addedBy || userId));
+      const fetchedMembers = await Promise.all(updatedMembersPromises);
+      const fetchedMembersMap = new Map(fetchedMembers.map(m => [m.CharacterName, m]));
+      const updatedRaid = JSON.parse(JSON.stringify(raidToSync));
+      const updateMember = (m) => fetchedMembersMap.get(m.CharacterName) || m;
+      if (updatedRaid.type === 'general') updatedRaid.participants = updatedRaid.participants.map(updateMember);
+      else {
+        updatedRaid.party1.dealers = updatedRaid.party1.dealers.map(updateMember);
+        if (updatedRaid.party1.support) updatedRaid.party1.support = updateMember(updatedRaid.party1.support);
+        updatedRaid.party2.dealers = updatedRaid.party2.dealers.map(updateMember);
+        if (updatedRaid.party2.support) updatedRaid.party2.support = updateMember(updatedRaid.party2.support);
+      }
+      const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidToSync.id);
+      await updateDoc(raidDocRef, updatedRaid);
+    } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
   };
 
   const currentRaid = raids.find(r => r.id === selectedRaidId);
@@ -263,14 +286,14 @@ export default function App() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div ref={raidListRef}><RaidList raids={raids} selectedRaidId={selectedRaidId} onSelectRaid={setSelectedRaidId} onDeleteClick={handleDeleteRaidClick} /></div>
-                <RaidDetails currentRaid={currentRaid} userId={userId} onEditClick={handleEditRaid} onRemoveCharacterClick={handleRemoveCharacterClick} />
+                <RaidDetails currentRaid={currentRaid} userId={userId} onEditClick={handleEditRaid} onRemoveCharacterClick={handleRemoveCharacterClick} onSyncCombatPower={handleSyncCombatPower} isSyncing={isSyncing} />
               </div>
             </div>
           </div>
         )}
         <CreateRaidModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreate={handleCreateRaid} isCreating={isCreatingRaid} />
         <EditRaidModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} onUpdate={handleUpdateRaid} isUpdating={isUpdatingRaid} raidToEdit={raidToEdit} />
-        <DeleteModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={confirmDelete} subject={subjectToDelete} />
+        <DeleteModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setSubjectToDelete(null); }} onConfirm={confirmDelete} subject={subjectToDelete} />
         <AdminPasswordModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onConfirm={handleAdminConfirm} />
         <CannotDeleteModal isOpen={showCannotDeleteModal} onClose={() => setShowCannotDeleteModal(false)} onAdminDelete={() => { setShowCannotDeleteModal(false); setShowAdminModal(true); }} />
         <RaidSelectionModal isOpen={showRaidSelectionModal} onClose={() => setShowRaidSelectionModal(false)} onSelect={handleRaidSelectedForAssignment} raids={raids} character={characterToAssign} />

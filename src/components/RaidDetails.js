@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Trash2, Swords } from 'lucide-react';
+import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
 const PartySlot = ({ member, onRemove, type }) => (
   <div className={`p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center`}>
@@ -22,39 +22,17 @@ const PartySlot = ({ member, onRemove, type }) => (
 
 const calculateAverageCombatPowerDetails = (raid) => {
   if (!raid) return 'N/A';
-
   let members = [];
-  if (raid.type === 'general') {
-    members = raid.participants || [];
-  } else {
-    members = [
-      ...(raid.party1?.dealers || []),
-      raid.party1?.support,
-      ...(raid.party2?.dealers || []),
-      raid.party2?.support,
-    ].filter(Boolean);
-  }
-
+  if (raid.type === 'general') members = raid.participants || [];
+  else members = [...(raid.party1?.dealers || []), raid.party1?.support, ...(raid.party2?.dealers || []), raid.party2?.support].filter(Boolean);
   const validMembers = members.filter(m => m && m.CombatPower && m.CombatPower !== 'N/A');
-
-  if (validMembers.length === 0) {
-    return 'N/A';
-  }
-
-  const totalPower = validMembers.reduce((sum, member) => {
-    const power = parseFloat(String(member.CombatPower).replace(/,/g, ''));
-    return sum + (isNaN(power) ? 0 : power);
-  }, 0);
-
+  if (validMembers.length === 0) return 'N/A';
+  const totalPower = validMembers.reduce((sum, member) => sum + (isNaN(parseFloat(String(member.CombatPower).replace(/,/g, ''))) ? 0 : parseFloat(String(member.CombatPower).replace(/,/g, ''))), 0);
   const averagePower = totalPower / validMembers.length;
-
-  return averagePower.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return averagePower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function RaidDetails({ currentRaid, userId, onEditClick, onRemoveCharacterClick }) {
+export default function RaidDetails({ currentRaid, userId, onEditClick, onRemoveCharacterClick, onSyncCombatPower, isSyncing }) {
   if (!currentRaid) {
     return <div className="flex items-center justify-center h-full text-gray-500">공격대를 선택하여 파티 구성을 확인하세요.</div>;
   }
@@ -68,9 +46,16 @@ export default function RaidDetails({ currentRaid, userId, onEditClick, onRemove
         {userId === currentRaid.creatorId && <button onClick={() => onEditClick(currentRaid)} className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0"><Pencil size={16} /></button>}
       </div>
       <div className="text-sm text-gray-400 mb-2">출발: {formatDateTime(currentRaid.dateTime)}</div>
-      <div className="text-sm text-amber-400 mb-4 flex items-center">
-        <Swords size={14} className="mr-1.5" />
-        평균 전투력: {avgCombatPower}
+      <div className="text-sm text-amber-400 mb-4 flex items-center justify-between">
+        <div className="flex items-center">
+            <Swords size={14} className="mr-1.5" />
+            평균 전투력: {avgCombatPower}
+        </div>
+        {userId === currentRaid.creatorId && (
+            <button onClick={() => onSyncCombatPower(currentRaid)} disabled={isSyncing} className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-50">
+                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            </button>
+        )}
       </div>
       
       {currentRaid.type === 'general' ? (
