@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
-const PartySlot = ({ member, onRemove, type }) => {
+const PartySlot = ({ member, onRemove, role, label }) => {
   // 아이템 레벨을 정수형으로 변환
   const itemLevel = member ? Math.floor(parseFloat(String(member.ItemAvgLevel).replace(/,/g, ''))) : 0;
 
@@ -10,11 +10,10 @@ const PartySlot = ({ member, onRemove, type }) => {
       {member ? (
         <>
           <div className="w-full">
-            <div className={`text-sm font-semibold flex items-center justify-center ${type === 'support' ? 'text-pink-400' : type === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
+            <div className={`text-sm font-semibold flex items-center justify-center ${role === 'support' ? 'text-pink-400' : role === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
               <span>{member.displayName}</span>
               {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
             </div>
-            {/* 변경된 부분 */}
             <div className="text-xs text-gray-400">
               {member.CharacterClassName}({itemLevel})
               {member.CombatPower && ` / 전투력 ${member.CombatPower}`}
@@ -23,7 +22,7 @@ const PartySlot = ({ member, onRemove, type }) => {
           <button onClick={onRemove} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50"><Trash2 size={12} /></button>
         </>
       ) : (
-        <div className="w-full text-xs text-gray-500">{type} 슬롯</div>
+        <div className="w-full text-xs text-gray-500">{label} 슬롯</div>
       )}
     </div>
   );
@@ -71,7 +70,7 @@ export default function RaidDetails({ currentRaid, userId, onEditClick, onRemove
         <div className="space-y-2">
           {Array.from({ length: currentRaid.size }).map((_, index) => {
             const member = currentRaid.participants?.[index];
-            return <PartySlot key={index} member={member} onRemove={() => onRemoveCharacterClick(null, 'general', index)} type="참여자" />;
+            return <PartySlot key={index} member={member} onRemove={() => onRemoveCharacterClick(null, 'general', index)} role="general" label="참여자" />;
           })}
         </div>
       ) : (
@@ -80,8 +79,8 @@ export default function RaidDetails({ currentRaid, userId, onEditClick, onRemove
             <div key={partyNum} className="bg-gray-800/70 p-3 rounded-md shadow-inner">
               <h3 className="font-semibold mb-2 text-indigo-300">{partyNum}파티</h3>
               <div className="space-y-2">
-                <PartySlot member={currentRaid[`party${partyNum}`].support} onRemove={() => onRemoveCharacterClick(partyNum, 'support', null)} type="서포터" />
-                {[0, 1, 2].map(index => <PartySlot key={index} member={currentRaid[`party${partyNum}`].dealers[index]} onRemove={() => onRemoveCharacterClick(partyNum, 'dealer', index)} type="딜러" />)}
+                <PartySlot member={currentRaid[`party${partyNum}`].support} onRemove={() => onRemoveCharacterClick(partyNum, 'support', null)} role="support" label="서포터" />
+                {[0, 1, 2].map(index => <PartySlot key={index} member={currentRaid[`party${partyNum}`].dealers[index]} onRemove={() => onRemoveCharacterClick(partyNum, 'dealer', index)} role="dealer" label="딜러" />)}
               </div>
             </div>
           ))}
