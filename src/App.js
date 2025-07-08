@@ -274,4 +274,5 @@ export default function App() {
       <style>{`.animate-fade-in{animation:fadeIn .3s ease-out forwards}@keyframes fadeIn{from{opacity:0}to{opacity:1}}.custom-scrollbar::-webkit-scrollbar{width:8px}.custom-scrollbar::-webkit-scrollbar-track{background:transparent}.custom-scrollbar::-webkit-scrollbar-thumb{background:#4b5563;border-radius:10px}`}</style>
     </div>
   );
+
 }
