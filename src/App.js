@@ -17,6 +17,7 @@ import RaidSelectionModal from './components/modals/RaidSelectionModal';
 import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
+const ADMIN_PASSWORD = '221215';
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -44,8 +45,12 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) setUserId(user.uid);
-      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        try { await signInAnonymously(auth); } 
+        catch (err) { setError('Firebase 인증에 실패했습니다.'); }
+      }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -274,5 +279,4 @@ export default function App() {
       <style>{`.animate-fade-in{animation:fadeIn .3s ease-out forwards}@keyframes fadeIn{from{opacity:0}to{opacity:1}}.custom-scrollbar::-webkit-scrollbar{width:8px}.custom-scrollbar::-webkit-scrollbar-track{background:transparent}.custom-scrollbar::-webkit-scrollbar-thumb{background:#4b5563;border-radius:10px}`}</style>
     </div>
   );
-
 }
