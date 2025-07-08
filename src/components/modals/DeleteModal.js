@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function DeleteModal({ isOpen, onClose, onConfirm, subject }) {
     if (!isOpen) return null;
-    const isRaid = subject?.type;
+    const isRaid = subject?.type === 'raid';
     const title = isRaid ? '공격대 삭제' : '캐릭터 제외';
     const message = isRaid ? '정말로 이 공격대를 삭제하시겠습니까?' : '정말로 이 캐릭터를 제외하시겠습니까?';
     const buttonText = isRaid ? '삭제' : '제외';

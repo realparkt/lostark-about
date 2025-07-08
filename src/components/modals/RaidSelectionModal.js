@@ -2,7 +2,6 @@ import React from 'react';
 
 export default function RaidSelectionModal({ isOpen, onClose, onSelect, raids, character }) {
     if (!isOpen || !character) return null;
-
     const formatDateTime = (isoString) => new Date(isoString).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 
     return (

@@ -3,14 +3,8 @@ import { ShieldCheck } from 'lucide-react';
 
 export default function AdminPasswordModal({ isOpen, onClose, onConfirm }) {
     const [password, setPassword] = useState('');
-
-    const handleConfirm = () => {
-        onConfirm(password);
-        setPassword('');
-    };
-
+    const handleConfirm = () => { onConfirm(password); setPassword(''); };
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
             <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm shadow-2xl transform scale-100 animate-scale-in border border-gray-700">
