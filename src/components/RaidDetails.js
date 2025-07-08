@@ -1,24 +1,36 @@
+// --- src/components/RaidDetails.js ---
+// (수정됨: 직업 정보 표시 형식 변경)
+
 import React from 'react';
 import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
-const PartySlot = ({ member, onRemove, type }) => (
-  <div className={`p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center`}>
-    {member ? (
-      <>
-        <div className="w-full">
-          <div className={`text-sm font-semibold flex items-center justify-center ${type === 'support' ? 'text-green-300' : type === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
-            <span>{member.displayName}</span>
-            {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+const PartySlot = ({ member, onRemove, type }) => {
+  // 아이템 레벨을 정수형으로 변환
+  const itemLevel = member ? Math.floor(parseFloat(String(member.ItemAvgLevel).replace(/,/g, ''))) : 0;
+
+  return (
+    <div className={`p-2 bg-gray-700/50 rounded border border-dashed border-gray-600 min-h-[56px] relative flex items-center text-center`}>
+      {member ? (
+        <>
+          <div className="w-full">
+            <div className={`text-sm font-semibold flex items-center justify-center ${type === 'support' ? 'text-green-300' : type === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
+              <span>{member.displayName}</span>
+              {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
+            </div>
+            {/* 변경된 부분 */}
+            <div className="text-xs text-gray-400">
+              {member.CharacterClassName}({itemLevel})
+              {member.CombatPower && ` / 전투력 ${member.CombatPower}`}
+            </div>
           </div>
-          <div className="text-xs text-gray-400">{member.CharacterClassName} | IL {member.ItemAvgLevel} {member.CombatPower && `/ 전투력 ${member.CombatPower}`}</div>
-        </div>
-        <button onClick={onRemove} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50"><Trash2 size={12} /></button>
-      </>
-    ) : (
-      <div className="w-full text-xs text-gray-500">{type} 슬롯</div>
-    )}
-  </div>
-);
+          <button onClick={onRemove} className="absolute top-1 right-1 text-red-400 hover:text-red-300 p-0.5 rounded-full bg-gray-800/50"><Trash2 size={12} /></button>
+        </>
+      ) : (
+        <div className="w-full text-xs text-gray-500">{type} 슬롯</div>
+      )}
+    </div>
+  );
+};
 
 const calculateAverageCombatPowerDetails = (raid) => {
   if (!raid) return 'N/A';
