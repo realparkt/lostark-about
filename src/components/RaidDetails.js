@@ -1,6 +1,3 @@
-// --- src/components/RaidDetails.js ---
-// (수정됨: 직업 정보 표시 형식 변경)
-
 import React from 'react';
 import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
@@ -13,7 +10,7 @@ const PartySlot = ({ member, onRemove, type }) => {
       {member ? (
         <>
           <div className="w-full">
-            <div className={`text-sm font-semibold flex items-center justify-center ${type === 'support' ? 'text-green-300' : type === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
+            <div className={`text-sm font-semibold flex items-center justify-center ${type === 'support' ? 'text-pink-400' : type === 'dealer' ? 'text-red-300' : 'text-sky-300'}`}>
               <span>{member.displayName}</span>
               {member.isSpecial && <span className="ml-1.5" title="자칭 귀염둥이">🎀</span>}
             </div>
