@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Pencil, Trash2, Swords, RefreshCw, Share2 } from 'lucide-react';
+import { Pencil, Trash2, Swords, RefreshCw } from 'lucide-react';
 
 const PartySlot = ({ member, onRemove, role, label }) => {
   const itemLevel = member ? Math.floor(parseFloat(String(member.ItemAvgLevel).replace(/,/g, ''))) : 0;
@@ -45,7 +44,7 @@ const calculateAverageCombatPowerDetails = (raid) => {
   return averagePower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function RaidDetails({ currentRaid, userId, onEditClick, onRemoveCharacterClick, onSyncCombatPower, isSyncing, onShareClick }) {
+export default function RaidDetails({ currentRaid, userId, onEditClick, onRemoveCharacterClick, onSyncCombatPower, isSyncing }) {
   if (!currentRaid) {
     return <div className="flex items-center justify-center h-full text-gray-500">공격대를 선택하여 파티 구성을 확인하세요.</div>;
   }
@@ -56,10 +55,7 @@ export default function RaidDetails({ currentRaid, userId, onEditClick, onRemove
     <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
       <div className="flex justify-between items-center mb-2">
         <h3 className="font-semibold text-lg text-gray-200 truncate pr-2">{currentRaid.name}</h3>
-        <div className="flex items-center gap-2">
-            <button onClick={() => onShareClick(currentRaid)} className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0"><Share2 size={16} /></button>
-            {userId === currentRaid.creatorId && <button onClick={() => onEditClick(currentRaid)} className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0"><Pencil size={16} /></button>}
-        </div>
+        {userId === currentRaid.creatorId && <button onClick={() => onEditClick(currentRaid)} className="p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-md transition-colors flex-shrink-0"><Pencil size={16} /></button>}
       </div>
       <div className="text-sm text-gray-400 mb-2">출발: {formatDateTime(currentRaid.dateTime)}</div>
       <div className="text-sm text-amber-400 mb-4 flex items-center justify-between">

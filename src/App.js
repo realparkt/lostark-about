@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, appId } from './firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
@@ -19,7 +18,6 @@ import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
 const ADMIN_PASSWORD = '221215';
-const KAKAO_JS_KEY = 'e59c29ed7f2302316a7587d5d429a3a4'; // 공개용 JavaScript 키
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -47,30 +45,9 @@ export default function App() {
   const raidListRef = useRef(null);
 
   useEffect(() => {
-    if (!window.Kakao) {
-      const script = document.createElement('script');
-      script.src = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.1/kakao.min.js';
-      script.integrity = 'sha384-dPuE23cCBa1UTV2hNCDLSAiTchJ+DY1S2sXJ/iA2JOiS0eD1bXAZrW3+KWI9ds4X';
-      script.crossOrigin = 'anonymous';
-      script.onload = () => {
-        if (window.Kakao && !window.Kakao.isInitialized()) {
-          window.Kakao.init(KAKAO_JS_KEY);
-        }
-      };
-      document.head.appendChild(script);
-    } else if (!window.Kakao.isInitialized()) {
-      window.Kakao.init(KAKAO_JS_KEY);
-    }
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        try { await signInAnonymously(auth); } 
-        catch (err) { setError('Firebase 인증에 실패했습니다.'); }
-      }
+      if (user) setUserId(user.uid);
+      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -220,7 +197,7 @@ export default function App() {
   
   const assignCharacter = async (raidId, partyNum, slot) => {
     if (!characterToAssign || !db) return;
-    const characterWithDetails = await fetchCharacterDetails(characterToAssign);
+    const characterWithDetails = await fetchCharacterDetails(characterToAssign, userId);
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidId);
     const currentRaidDoc = raids.find(r => r.id === raidId);
     if (!currentRaidDoc) return;
@@ -255,14 +232,14 @@ export default function App() {
     setShowAssignModal(false);
   };
 
-  const fetchCharacterDetails = async (character) => {
+  const fetchCharacterDetails = async (character, addedById) => {
     try {
       const armoryUrl = `https://developer-lostark.game.onstove.com/armories/characters/${encodeURIComponent(character.CharacterName)}?filters=profiles`;
       const response = await fetch(armoryUrl, { headers: { 'accept': 'application/json', 'authorization': `bearer ${LOST_ARK_API_KEY}` } });
       const data = await response.json();
-      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: userId };
-      return { ...character, CombatPower: 'N/A', addedBy: userId };
-    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: userId }; }
+      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: addedById };
+      return { ...character, CombatPower: 'N/A', addedBy: addedById };
+    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: addedById }; }
   };
 
   const handleSyncCombatPower = async (raidToSync) => {
@@ -274,7 +251,7 @@ export default function App() {
     const membersToUpdate = members.filter(m => m && !m.CombatPower);
     if (membersToUpdate.length === 0) { setIsSyncing(false); return; }
     try {
-      const updatedMembersPromises = membersToUpdate.map(member => fetchCharacterDetails(member));
+      const updatedMembersPromises = membersToUpdate.map(member => fetchCharacterDetails(member, member.addedBy || userId));
       const fetchedMembers = await Promise.all(updatedMembersPromises);
       const fetchedMembersMap = new Map(fetchedMembers.map(m => [m.CharacterName, m]));
       const updatedRaid = JSON.parse(JSON.stringify(raidToSync));
@@ -289,21 +266,6 @@ export default function App() {
       const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidToSync.id);
       await updateDoc(raidDocRef, updatedRaid);
     } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
-  };
-
-  const handleShareToKakao = (raid) => {
-    if (!window.Kakao || !raid) return;
-    const date = new Date(raid.dateTime);
-    const timeString = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: true });
-    
-    window.Kakao.Share.sendDefault({
-      objectType: 'text',
-      text: `[공격대 알림]\n잠시 후 ${timeString}에 '${raid.name}' 출발합니다!`,
-      link: {
-        mobileWebUrl: window.location.href,
-        webUrl: window.location.href,
-      },
-    });
   };
 
   const currentRaid = raids.find(r => r.id === selectedRaidId);
@@ -324,14 +286,14 @@ export default function App() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div ref={raidListRef}><RaidList raids={raids} selectedRaidId={selectedRaidId} onSelectRaid={setSelectedRaidId} onDeleteClick={handleDeleteRaidClick} /></div>
-                <RaidDetails currentRaid={currentRaid} userId={userId} onEditClick={handleEditRaid} onRemoveCharacterClick={handleRemoveCharacterClick} onSyncCombatPower={handleSyncCombatPower} isSyncing={isSyncing} onShareClick={handleShareToKakao} />
+                <RaidDetails currentRaid={currentRaid} userId={userId} onEditClick={handleEditRaid} onRemoveCharacterClick={handleRemoveCharacterClick} onSyncCombatPower={handleSyncCombatPower} isSyncing={isSyncing} />
               </div>
             </div>
           </div>
         )}
         <CreateRaidModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreate={handleCreateRaid} isCreating={isCreatingRaid} />
         <EditRaidModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} onUpdate={handleUpdateRaid} isUpdating={isUpdatingRaid} raidToEdit={raidToEdit} />
-        <DeleteModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={confirmDelete} subject={subjectToDelete} />
+        <DeleteModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setSubjectToDelete(null); }} onConfirm={confirmDelete} subject={subjectToDelete} />
         <AdminPasswordModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onConfirm={handleAdminConfirm} />
         <CannotDeleteModal isOpen={showCannotDeleteModal} onClose={() => setShowCannotDeleteModal(false)} onAdminDelete={() => { setShowCannotDeleteModal(false); setShowAdminModal(true); }} />
         <RaidSelectionModal isOpen={showRaidSelectionModal} onClose={() => setShowRaidSelectionModal(false)} onSelect={handleRaidSelectedForAssignment} raids={raids} character={characterToAssign} />
