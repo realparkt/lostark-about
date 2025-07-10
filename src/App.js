@@ -1,5 +1,3 @@
-// --- src/App.js ---
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, appId } from './firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
@@ -19,7 +17,6 @@ import RaidSelectionModal from './components/modals/RaidSelectionModal';
 import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
-const ADMIN_PASSWORD = '221215';
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -43,23 +40,18 @@ export default function App() {
   const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
 
   const raidListRef = useRef(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        try { await signInAnonymously(auth); } 
-        catch (err) { setError('Firebase 인증에 실패했습니다.'); }
-      }
+      if (user) setUserId(user.uid);
+      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
   }, []);
-
+  
   useEffect(() => {
     if (!isAuthReady || !db) return;
     const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
@@ -76,32 +68,6 @@ export default function App() {
     }, () => setError('공격대 데이터를 불러오는 데 실패했습니다.'));
     return () => unsubscribe();
   }, [isAuthReady, db, selectedRaidId]);
-
-  useEffect(() => {
-    const checkExpiredRaids = async () => {
-      if (!db || !isAuthReady || !userId) return;
-      const now = new Date();
-      const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
-      try {
-        const snapshot = await getDocs(raidsCollectionRef);
-        const raidsToDelete = [];
-        snapshot.forEach(doc => {
-          const raid = doc.data();
-          if(raid.dateTime) {
-            const twoHoursAfterRaid = new Date(new Date(raid.dateTime).getTime() + 2 * 60 * 60 * 1000); 
-            if (now >= twoHoursAfterRaid) raidsToDelete.push(doc.id);
-          }
-        });
-        if (raidsToDelete.length > 0) {
-          const deletePromises = raidsToDelete.map(raidId => deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidId)));
-          await Promise.all(deletePromises);
-        }
-      } catch (err) { console.error("Error checking for expired raids:", err); }
-    };
-    const intervalId = setInterval(checkExpiredRaids, 60 * 60 * 1000);
-    checkExpiredRaids();
-    return () => clearInterval(intervalId);
-  }, [isAuthReady, db, userId]);
 
   const handleSearchCharacter = async (characterName) => {
     if (!LOST_ARK_API_KEY) { setError('오류: 로스트아크 API 키가 설정되지 않았습니다.'); return; }
@@ -179,7 +145,6 @@ export default function App() {
 
   const confirmDelete = async () => {
     if (!subjectToDelete) return;
-    const db = getFirestore();
     if (subjectToDelete.type === 'raid') {
         const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, subjectToDelete.data.id);
         try { await deleteDoc(raidDocRef); } catch (e) { setError('공격대 삭제에 실패했습니다.'); }
@@ -231,7 +196,6 @@ export default function App() {
   
   const assignCharacter = async (raidId, partyNum, slot) => {
     if (!characterToAssign) return;
-    const db = getFirestore();
     const characterWithDetails = await fetchCharacterDetails(characterToAssign);
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidId);
     const currentRaidDoc = raids.find(r => r.id === raidId);
