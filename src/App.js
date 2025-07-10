@@ -303,7 +303,7 @@ export default function App() {
       await updateDoc(raidDocRef, updatedRaid);
     } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
   };
-  
+
   const currentRaid = raids.find(r => r.id === selectedRaidId);
 
   return (
