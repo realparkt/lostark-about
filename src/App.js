@@ -1,3 +1,5 @@
+// --- src/App.js ---
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, appId } from './firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
@@ -46,8 +48,12 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) setUserId(user.uid);
-      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        try { await signInAnonymously(auth); } 
+        catch (err) { setError('Firebase 인증에 실패했습니다.'); }
+      }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -69,6 +75,32 @@ export default function App() {
     }, () => setError('공격대 데이터를 불러오는 데 실패했습니다.'));
     return () => unsubscribe();
   }, [isAuthReady, db, selectedRaidId]);
+
+  useEffect(() => {
+    const checkExpiredRaids = async () => {
+      if (!db || !isAuthReady || !userId) return;
+      const now = new Date();
+      const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
+      try {
+        const snapshot = await getDocs(raidsCollectionRef);
+        const raidsToDelete = [];
+        snapshot.forEach(doc => {
+          const raid = doc.data();
+          if(raid.dateTime) {
+            const twoHoursAfterRaid = new Date(new Date(raid.dateTime).getTime() + 2 * 60 * 60 * 1000); 
+            if (now >= twoHoursAfterRaid) raidsToDelete.push(doc.id);
+          }
+        });
+        if (raidsToDelete.length > 0) {
+          const deletePromises = raidsToDelete.map(raidId => deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raidId)));
+          await Promise.all(deletePromises);
+        }
+      } catch (err) { console.error("Error checking for expired raids:", err); }
+    };
+    const intervalId = setInterval(checkExpiredRaids, 60 * 60 * 1000);
+    checkExpiredRaids();
+    return () => clearInterval(intervalId);
+  }, [isAuthReady, db, userId]);
 
   const handleSearchCharacter = async (characterName) => {
     if (!LOST_ARK_API_KEY) { setError('오류: 로스트아크 API 키가 설정되지 않았습니다.'); return; }
@@ -146,6 +178,7 @@ export default function App() {
 
   const confirmDelete = async () => {
     if (!subjectToDelete) return;
+    const db = getFirestore();
     if (subjectToDelete.type === 'raid') {
         const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, subjectToDelete.data.id);
         try { await deleteDoc(raidDocRef); } catch (e) { setError('공격대 삭제에 실패했습니다.'); }
@@ -196,8 +229,9 @@ export default function App() {
   };
   
   const assignCharacter = async (raidId, partyNum, slot) => {
-    if (!characterToAssign || !db) return;
-    const characterWithDetails = await fetchCharacterDetails(characterToAssign, userId);
+    if (!characterToAssign) return;
+    const db = getFirestore();
+    const characterWithDetails = await fetchCharacterDetails(characterToAssign);
     const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidId);
     const currentRaidDoc = raids.find(r => r.id === raidId);
     if (!currentRaidDoc) return;
@@ -232,14 +266,14 @@ export default function App() {
     setShowAssignModal(false);
   };
 
-  const fetchCharacterDetails = async (character, addedById) => {
+  const fetchCharacterDetails = async (character) => {
     try {
       const armoryUrl = `https://developer-lostark.game.onstove.com/armories/characters/${encodeURIComponent(character.CharacterName)}?filters=profiles`;
       const response = await fetch(armoryUrl, { headers: { 'accept': 'application/json', 'authorization': `bearer ${LOST_ARK_API_KEY}` } });
       const data = await response.json();
-      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: addedById };
-      return { ...character, CombatPower: 'N/A', addedBy: addedById };
-    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: addedById }; }
+      if (response.ok && data.ArmoryProfile) return { ...character, CombatPower: data.ArmoryProfile.CombatPower, addedBy: userId };
+      return { ...character, CombatPower: 'N/A', addedBy: userId };
+    } catch (err) { return { ...character, CombatPower: 'N/A', addedBy: userId }; }
   };
 
   const handleSyncCombatPower = async (raidToSync) => {
@@ -251,7 +285,7 @@ export default function App() {
     const membersToUpdate = members.filter(m => m && !m.CombatPower);
     if (membersToUpdate.length === 0) { setIsSyncing(false); return; }
     try {
-      const updatedMembersPromises = membersToUpdate.map(member => fetchCharacterDetails(member, member.addedBy || userId));
+      const updatedMembersPromises = membersToUpdate.map(member => fetchCharacterDetails(member));
       const fetchedMembers = await Promise.all(updatedMembersPromises);
       const fetchedMembersMap = new Map(fetchedMembers.map(m => [m.CharacterName, m]));
       const updatedRaid = JSON.parse(JSON.stringify(raidToSync));
@@ -263,6 +297,7 @@ export default function App() {
         updatedRaid.party2.dealers = updatedRaid.party2.dealers.map(updateMember);
         if (updatedRaid.party2.support) updatedRaid.party2.support = updateMember(updatedRaid.party2.support);
       }
+      const db = getFirestore();
       const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidToSync.id);
       await updateDoc(raidDocRef, updatedRaid);
     } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
@@ -293,7 +328,7 @@ export default function App() {
         )}
         <CreateRaidModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreate={handleCreateRaid} isCreating={isCreatingRaid} />
         <EditRaidModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} onUpdate={handleUpdateRaid} isUpdating={isUpdatingRaid} raidToEdit={raidToEdit} />
-        <DeleteModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setSubjectToDelete(null); }} onConfirm={confirmDelete} subject={subjectToDelete} />
+        <DeleteModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={confirmDelete} subject={subjectToDelete} />
         <AdminPasswordModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onConfirm={handleAdminConfirm} />
         <CannotDeleteModal isOpen={showCannotDeleteModal} onClose={() => setShowCannotDeleteModal(false)} onAdminDelete={() => { setShowCannotDeleteModal(false); setShowAdminModal(true); }} />
         <RaidSelectionModal isOpen={showRaidSelectionModal} onClose={() => setShowRaidSelectionModal(false)} onSelect={handleRaidSelectedForAssignment} raids={raids} character={characterToAssign} />
