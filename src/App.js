@@ -20,7 +20,6 @@ import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
 const ADMIN_PASSWORD = '221215';
-const KAKAO_JS_KEY = 'e59c29ed7f2302316a7587d5d429a3a4';
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -304,7 +303,7 @@ export default function App() {
       await updateDoc(raidDocRef, updatedRaid);
     } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
   };
-
+  
   const currentRaid = raids.find(r => r.id === selectedRaidId);
 
   return (
