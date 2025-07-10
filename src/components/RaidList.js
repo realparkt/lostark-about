@@ -3,38 +3,15 @@ import { Clock, Trash2, Gamepad2, Swords } from 'lucide-react';
 
 const calculateAverageCombatPower = (raid) => {
   if (!raid) return 'N/A';
-
   let members = [];
-  if (raid.type === 'general') {
-    members = raid.participants || [];
-  } else {
-    members = [
-      ...(raid.party1?.dealers || []),
-      raid.party1?.support,
-      ...(raid.party2?.dealers || []),
-      raid.party2?.support,
-    ].filter(Boolean);
-  }
-
+  if (raid.type === 'general') members = raid.participants || [];
+  else members = [...(raid.party1?.dealers || []), raid.party1?.support, ...(raid.party2?.dealers || []), raid.party2?.support].filter(Boolean);
   const validMembers = members.filter(m => m && m.CombatPower && m.CombatPower !== 'N/A');
-
-  if (validMembers.length === 0) {
-    return 'N/A';
-  }
-
-  const totalPower = validMembers.reduce((sum, member) => {
-    const power = parseFloat(String(member.CombatPower).replace(/,/g, ''));
-    return sum + (isNaN(power) ? 0 : power);
-  }, 0);
-
+  if (validMembers.length === 0) return 'N/A';
+  const totalPower = validMembers.reduce((sum, member) => sum + (isNaN(parseFloat(String(member.CombatPower).replace(/,/g, ''))) ? 0 : parseFloat(String(member.CombatPower).replace(/,/g, ''))), 0);
   const averagePower = totalPower / validMembers.length;
-
-  return averagePower.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
+  return averagePower.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
-
 
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
