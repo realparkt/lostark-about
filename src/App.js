@@ -20,6 +20,7 @@ import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
 const ADMIN_PASSWORD = '221215';
+const KAKAO_JS_KEY = 'e59c29ed7f2302316a7587d5d429a3a4';
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -43,6 +44,7 @@ export default function App() {
   const [showRaidSelectionModal, setShowRaidSelectionModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
 
   const raidListRef = useRef(null);
 
@@ -328,7 +330,7 @@ export default function App() {
         )}
         <CreateRaidModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreate={handleCreateRaid} isCreating={isCreatingRaid} />
         <EditRaidModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} onUpdate={handleUpdateRaid} isUpdating={isUpdatingRaid} raidToEdit={raidToEdit} />
-        <DeleteModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={confirmDelete} subject={subjectToDelete} />
+        <DeleteModal isOpen={showDeleteModal} onClose={() => {setShowDeleteModal(false); setSubjectToDelete(null);}} onConfirm={confirmDelete} subject={subjectToDelete} />
         <AdminPasswordModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onConfirm={handleAdminConfirm} />
         <CannotDeleteModal isOpen={showCannotDeleteModal} onClose={() => setShowCannotDeleteModal(false)} onAdminDelete={() => { setShowCannotDeleteModal(false); setShowAdminModal(true); }} />
         <RaidSelectionModal isOpen={showRaidSelectionModal} onClose={() => setShowRaidSelectionModal(false)} onSelect={handleRaidSelectedForAssignment} raids={raids} character={characterToAssign} />
