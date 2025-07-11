@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, appId } from './firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, getDocs } from 'firebase/firestore';
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from 'firebase/firestore';
 
 import CharacterSearch from './components/CharacterSearch';
 import RaidList from './components/RaidList';
@@ -16,7 +16,10 @@ import RaidSelectionModal from './components/modals/RaidSelectionModal';
 
 import { Users, Plus, Loader, AlertCircle } from 'lucide-react';
 
+// .env 파일에서 환경 변수 가져오기
 const LOST_ARK_API_KEY = process.env.REACT_APP_LOSTARK_API_KEY;
+// ❗ [수정] 관리자 비밀번호 변수를 환경 변수에서 가져오도록 추가
+const ADMIN_PASSWORD = process.env.REACT_APP_ADMIN_PASSWORD; 
 
 export default function App() {
   const [characters, setCharacters] = useState([]);
@@ -45,29 +48,67 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) setUserId(user.uid);
-      else try { await signInAnonymously(auth); } catch (err) { setError('Firebase 인증에 실패했습니다.'); }
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        try {
+          await signInAnonymously(auth);
+        } catch (err) {
+          setError('Firebase 인증에 실패했습니다.');
+        }
+      }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
   }, []);
   
+  // ❗ [수정] 자동 삭제 기능이 추가된 useEffect
   useEffect(() => {
     if (!isAuthReady || !db) return;
+
     const raidsCollectionRef = collection(db, `artifacts/${appId}/public/data/raids`);
     const q = query(raidsCollectionRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedRaids = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        fetchedRaids.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
-        setRaids(fetchedRaids);
-        if (!selectedRaidId && fetchedRaids.length > 0) {
-            setSelectedRaidId(fetchedRaids[0].id);
-        } else if (selectedRaidId && !fetchedRaids.some(raid => raid.id === selectedRaidId)) {
-            setSelectedRaidId(fetchedRaids.length > 0 ? fetchedRaids[0].id : null);
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      let fetchedRaids = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // --- 자동 삭제 로직 ---
+      const now = new Date();
+      // 공격대 시간 기준 2시간이 지난 공격대를 필터링
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      const raidsToDelete = fetchedRaids.filter(raid => new Date(raid.dateTime) < twoHoursAgo);
+
+      if (raidsToDelete.length > 0) {
+        try {
+          // Promise.all을 사용하여 여러 문서를 동시에 삭제
+          const deletePromises = raidsToDelete.map(raid =>
+            deleteDoc(doc(db, `artifacts/${appId}/public/data/raids`, raid.id))
+          );
+          await Promise.all(deletePromises);
+          // 삭제된 레이드를 현재 목록에서 제거하여 UI에 즉시 반영
+          fetchedRaids = fetchedRaids.filter(raid => !raidsToDelete.some(deleted => deleted.id === raid.id));
+        } catch (err) {
+          console.error("오래된 공격대 자동 삭제 실패:", err);
+          setError('오래된 공격대를 삭제하는 중 오류가 발생했습니다.');
         }
-    }, () => setError('공격대 데이터를 불러오는 데 실패했습니다.'));
+      }
+      // --- 자동 삭제 로직 끝 ---
+
+      fetchedRaids.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+      setRaids(fetchedRaids);
+
+      if (!selectedRaidId && fetchedRaids.length > 0) {
+        setSelectedRaidId(fetchedRaids[0].id);
+      } else if (selectedRaidId && !fetchedRaids.some(raid => raid.id === selectedRaidId)) {
+        setSelectedRaidId(fetchedRaids.length > 0 ? fetchedRaids[0].id : null);
+      }
+    }, (err) => {
+        console.error("공격대 데이터 로딩 실패:", err);
+        setError('공격대 데이터를 불러오는 데 실패했습니다.');
+    });
+
     return () => unsubscribe();
-  }, [isAuthReady, db, selectedRaidId]);
+  }, [isAuthReady, selectedRaidId]); // db 의존성 제거
 
   const handleSearchCharacter = async (characterName) => {
     if (!LOST_ARK_API_KEY) { setError('오류: 로스트아크 API 키가 설정되지 않았습니다.'); return; }
@@ -168,7 +209,12 @@ export default function App() {
     setShowDeleteModal(false); setSubjectToDelete(null);
   };
   
+  // ❗ [수정] ADMIN_PASSWORD 변수를 사용하여 비밀번호를 비교
   const handleAdminConfirm = (password) => {
+    if (!ADMIN_PASSWORD) {
+        setError('관리자 비밀번호가 설정되지 않았습니다. .env 파일을 확인해주세요.');
+        return;
+    }
     if (password === ADMIN_PASSWORD) {
         confirmDelete();
         setShowAdminModal(false);
@@ -205,7 +251,9 @@ export default function App() {
     const assignedCharMainName = getCharMainName(characterWithDetails);
     const isFamilyAlreadyInRaid = (raidType) => {
         if (raidType === 'general') return updatedRaid.participants.some(member => getCharMainName(member) === assignedCharMainName);
-        return Object.values(updatedRaid.party1).flat().concat(Object.values(updatedRaid.party2).flat()).filter(Boolean).some(member => getCharMainName(member) === assignedCharMainName);
+        return [...(updatedRaid.party1?.dealers || []), updatedRaid.party1?.support, ...(updatedRaid.party2?.dealers || []), updatedRaid.party2?.support]
+            .filter(Boolean)
+            .some(member => getCharMainName(member) === assignedCharMainName);
     };
     if (isFamilyAlreadyInRaid(currentRaidDoc.type)) { setError(`'${assignedCharMainName}' 계정의 캐릭터는 이미 이 파티에 할당되어 있습니다.`); return; }
     if (currentRaidDoc.type === 'general') {
@@ -262,7 +310,6 @@ export default function App() {
         updatedRaid.party2.dealers = updatedRaid.party2.dealers.map(updateMember);
         if (updatedRaid.party2.support) updatedRaid.party2.support = updateMember(updatedRaid.party2.support);
       }
-      const db = getFirestore();
       const raidDocRef = doc(db, `artifacts/${appId}/public/data/raids`, raidToSync.id);
       await updateDoc(raidDocRef, updatedRaid);
     } catch (err) { setError('전투력 동기화 중 오류가 발생했습니다.'); } finally { setIsSyncing(false); }
